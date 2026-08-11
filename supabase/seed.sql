@@ -6,11 +6,11 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_campaign uuid := '11111111-1111-4111-8111-111111111111';
-  v_session uuid := '50000000-0000-4000-8000-000000000001';
-  v_scene uuid := '50000000-0000-4000-8000-000000000002';
-  v_encounter uuid := '51000000-0000-4000-8000-000000000001';
-  v_message uuid := '52000000-0000-4000-8000-000000000001';
+  v_campaign uuid := '11111111-1111-4111-8111-111111111111'::uuid;
+  v_session uuid := '50000000-0000-4000-8000-000000000001'::uuid;
+  v_scene uuid := '50000000-0000-4000-8000-000000000002'::uuid;
+  v_encounter uuid := '51000000-0000-4000-8000-000000000001'::uuid;
+  v_message uuid := '52000000-0000-4000-8000-000000000001'::uuid;
 begin
   if not exists (select 1 from auth.users where id = p_owner_user_id) then
     raise exception 'Crie o usuário mestre pelo script server-side antes de executar o seed';
