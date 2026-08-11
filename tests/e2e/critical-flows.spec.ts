@@ -1,0 +1,131 @@
+import { expect, test } from "@playwright/test";
+
+test("mestre acessa o painel e controla uma sessão", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.waitForURL("**/master");
+  await expect(page.getByRole("heading", { name: "Painel do mestre" })).toBeVisible();
+  await page.getByRole("link", { name: /Abrir console/ }).click();
+  await expect(page.getByRole("heading", { name: "Zona 7: A Convergência" })).toBeVisible();
+});
+
+test("jogador acessa somente a própria experiência mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Jogador" }).click();
+  await page.waitForURL("**/app");
+  await expect(page.getByRole("heading", { name: /Boa noite, Davi/ })).toBeVisible();
+  await page.getByRole("link", { name: /Entrar na sala/ }).click();
+  await expect(page.getByRole("heading", { name: "A transmissão impossível" })).toBeVisible();
+});
+
+test("rolagem é produzida pelo servidor e auditável", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Jogador" }).click();
+  await page.goto("/app/session/session-01");
+  await page.getByLabel("Fórmula de dados").fill("4d20kh1+10");
+  await page.getByRole("button", { name: "Rolar" }).click();
+  await expect(page.getByText("4d20kh1+10")).toBeVisible();
+});
+
+test("mestre enxerga as seis fichas e a configuração completa", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/characters");
+  await expect(page.getByRole("heading", { name: "Personagens" })).toBeVisible();
+  await expect(page.getByText("Gragas", { exact: true })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: "NEX" })).toHaveCount(6);
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/settings");
+  await expect(page.getByRole("heading", { name: "Configurações" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Identidade da campanha" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Módulos e recursos" })).toBeVisible();
+});
+
+test("jogador confirma uso funcional de habilidade", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Jogador" }).click();
+  await page.goto("/app/characters/davi/abilities");
+  const ability = page.locator("article").filter({ hasText: "Sempre no Ar" });
+  await ability.getByRole("button", { name: "Usar habilidade" }).click();
+  await ability.getByRole("button", { name: "Confirmar uso e descontar" }).click();
+  await expect(page.getByText("Sempre no Ar")).toBeVisible();
+});
+
+test("mestre valida e inicia um roteiro publicado", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/scripts");
+  await page.getByRole("button", { name: "Validar sem executar" }).click();
+  await expect(page.getByText("Validação concluída. Nenhuma ação foi executada.")).toBeVisible();
+  await page.getByRole("button", { name: "Executar versão publicada" }).click();
+  await expect(page.getByText(/Execução em execução/)).toBeVisible();
+});
+
+test("central da sessão reúne controle, entregas e Gragas jogável", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/sessions");
+  await expect(page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" })).toBeVisible();
+  const gragasToken = page.getByRole("button", { name: "Token de Gragas" });
+  await expect(gragasToken.locator(".map-token-head")).toHaveCSS("background-image", /personagens-zona7/);
+  await page.getByRole("button", { name: "Aumentar zoom" }).click();
+  await expect(page.getByText("125%", { exact: true })).toBeVisible();
+  await gragasToken.click();
+  await expect(page.locator("#acoes-rapidas").getByRole("heading", { name: "Gragas" })).toBeVisible();
+  await page.getByRole("button", { name: "Ocultar" }).click();
+  await expect(page.getByText("Gragas foi ocultado da tela dos jogadores.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Token de Gragas" })).toHaveCount(0);
+  await page.getByPlaceholder("Nome do item").fill("Cartão vermelho");
+  await page.getByPlaceholder("Descrição ou conteúdo").fill("Abre a porta do estúdio.");
+  await page.getByRole("button", { name: "Entregar e notificar" }).click();
+  await expect(page.getByText(/Item entregue a Gragas/)).toBeVisible();
+});
+
+test("mestre configura a ficha liberada para o jogador", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/characters/davi");
+  await expect(page.getByRole("heading", { name: "O que aparece para o jogador" })).toBeVisible();
+  await page.getByLabel("Fraquezas conhecidas").check();
+  await page.getByRole("button", { name: "Salvar visibilidade" }).click();
+  await expect(page.getByText("Ficha do jogador atualizada.")).toBeVisible();
+});
+
+test("mestre cria conta e atribui um personagem", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/members");
+  await page.getByLabel("Nome", { exact: true }).fill("Jogador Novo");
+  await page.getByLabel("E-mail").fill("jogador.novo@zona7.local");
+  await page.getByLabel("Personagem atribuído").selectOption({ label: "Gragas — Hospedeiro do Revide" });
+  await page.getByRole("button", { name: "Gerar" }).click();
+  await page.getByRole("button", { name: "Criar conta e atribuir" }).click();
+  await expect(page.getByText(/Conta de Jogador Novo criada/)).toBeVisible();
+  const assignedCharacter = page.getByRole("combobox", { name: "Personagem de Jogador Novo", exact: true });
+  await expect(assignedCharacter).toHaveValue("gragas");
+  await assignedCharacter.selectOption("");
+  await page.getByRole("button", { name: "Salvar personagem de Jogador Novo" }).click();
+  await expect(page.getByText("A ficha foi removida da conta de Jogador Novo.")).toBeVisible();
+});
+
+test("mestre cria personagem jogável e pode vincular conta", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/characters");
+  await page.getByRole("button", { name: "Criar personagem" }).click();
+  await page.getByLabel("Nome", { exact: true }).fill("Nina Sete");
+  await page.getByLabel("Codinome").fill("A Frequência");
+  await page.getByRole("button", { name: "Criar ficha completa" }).click();
+  await expect(page.getByText("Nina Sete foi criado como personagem jogável.")).toBeVisible();
+});
+
+test("mestre envia retrato de ator e o insere na cena", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/actors");
+  const rivaldo = page.locator("article").filter({ hasText: "Rivaldo" });
+  await rivaldo.locator('input[type="file"]').setInputFiles("public/personagens-zona7.png");
+  await expect(page.getByText("Retrato de Rivaldo atualizado")).toBeVisible();
+  await rivaldo.getByRole("button", { name: "Inserir para todos" }).click();
+  await expect(page.getByText(/Rivaldo foi inserido em Estúdio dos Sete Segundos/)).toBeVisible();
+});

@@ -1,0 +1,11 @@
+{
+  "name": "Zona 7 - Terminal",
+  "short_name": "Zona 7",
+  "description": "Terminal narrativo para campanhas de Zona 7.",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#08090b",
+  "theme_color": "#08090b",
+  "lang": "pt-BR",
+  "orientation": "portrait-primary"
+}

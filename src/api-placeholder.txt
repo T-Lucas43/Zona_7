@@ -1,0 +1,1 @@
+This file keeps the patch grouped; API routes live under src/app/api.
