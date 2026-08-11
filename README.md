@@ -103,6 +103,6 @@ Nunca exponha `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET` ou `WEB_PUSH_PRIVATE_KE
 
 ## Publicação
 
-O projeto está preparado para Vercel, sem filesystem persistente. Uploads ficam no Supabase Storage. A rota `/api/cron/process-events` exige `Authorization: Bearer <CRON_SECRET>` e o cron de cinco minutos funciona como rede de segurança; eventos de sessão devem ser processados também pelo painel autenticado para precisão curta.
+O projeto está preparado para Vercel, sem filesystem persistente. Uploads ficam no Supabase Storage. A rota `/api/cron/process-events` exige `Authorization: Bearer <CRON_SECRET>` e o cron diário compatível com o plano Hobby funciona apenas como rede de segurança; os eventos da sessão são processados também pelo painel autenticado para precisão curta.
 
 Consulte [docs/VERCEL.md](docs/VERCEL.md) antes de publicar.

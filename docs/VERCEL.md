@@ -19,7 +19,7 @@ Cadastre URLs local, preview e produção no Supabase Auth. Cookies são `Secure
 
 ## Cron
 
-`vercel.json` chama `/api/cron/process-events` a cada cinco minutos. A rota exige `Authorization: Bearer ${CRON_SECRET}`. Esse cron é uma rede de segurança; durante sessões, o painel deve chamar o processador autenticado em intervalo curto e idempotente.
+`vercel.json` chama `/api/cron/process-events` diariamente às 03:00 UTC, frequência aceita pelo plano Hobby. A rota exige `Authorization: Bearer ${CRON_SECRET}`. Esse cron é apenas uma rede de segurança; durante sessões, o painel chama o processador autenticado em intervalo curto e idempotente, portanto a experiência ao vivo não depende do agendamento diário.
 
 ## Arquivos
 
