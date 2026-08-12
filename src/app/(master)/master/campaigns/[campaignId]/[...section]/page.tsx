@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { CharacterCard } from "@/components/character/character-card";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
-import { ResourceBars } from "@/components/character/resource-bars";
+import { CharacterSheetOverview } from "@/components/character/character-sheet-overview";
 import { AbilityManager } from "@/components/master/ability-manager";
 import { AccountManager } from "@/components/master/account-manager";
 import { ActorManager } from "@/components/master/actor-manager";
@@ -30,6 +30,7 @@ import {
   getCharacterAbilities,
   getCharacterSkills,
   getCharacterWeaknesses,
+  getCharacterInventory,
 } from "@/server/repositories/character-repository";
 import {
   getAtores,
@@ -120,17 +121,29 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
   const elenco = await getCampaignCharacters(campaignId);
   const character = elenco.find((item) => item.id === id);
   if (!character) notFound();
-  const [habilidades, pericias, acoes, fraquezas] = await Promise.all([
+  const [habilidades, pericias, acoes, fraquezas, inventario] = await Promise.all([
     getCharacterAbilities(character.id),
     getCharacterSkills(character.id),
     getCharacterActions(character.id),
     getCharacterWeaknesses(character.id),
+    getCharacterInventory(character.id),
   ]);
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="eyebrow">ficha completa // concorrência otimista</p><h1 className="mt-1 text-3xl font-black">{character.name}</h1></div>
         <CharacterPdfActions characterId={character.id} />
+      </div>
+      <div className="mt-6">
+        <CharacterSheetOverview
+          character={character}
+          skills={pericias}
+          actions={acoes}
+          abilities={habilidades}
+          weaknesses={fraquezas}
+          inventory={inventario}
+          master
+        />
       </div>
       <div className="mt-6 grid gap-4 xl:grid-cols-[0.72fr_1.35fr_0.85fr]">
         <aside className="panel rounded-lg p-4">
@@ -152,57 +165,6 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
         <div className="space-y-4">
           <CharacterIdentityEditor campaignId={campaignId} initial={character} />
           <CharacterVisibilityManager campaignId={campaignId} character={character} />
-          <section className="panel rounded-lg p-5">
-            <h2 className="font-extrabold">Estado e atributos</h2>
-            <div className="mt-4">
-              <ResourceBars resources={character.resources} />
-            </div>
-            <div className="mt-4 grid grid-cols-5 gap-2">
-              {Object.entries(character.attributes).map(([key, value]) => (
-                <div className="rounded border border-[#30333a] p-3 text-center" key={key}>
-                  <span className="block text-[0.65rem] uppercase text-[#777a82]">{key}</span>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="panel rounded-lg p-5">
-            <h2 className="font-extrabold">Perícias e ações</h2>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {pericias.map((pericia) => (
-                <div className="rounded border border-[#30333a] p-3 text-sm" key={pericia.id}>
-                  <div className="flex justify-between gap-3">
-                    <span>
-                      {pericia.name} <small className="text-[#777a82]">{pericia.attribute}</small>
-                    </span>
-                    <strong>+{pericia.bonus}</strong>
-                  </div>
-                  <div className="mt-3 rounded border border-[#262930] bg-black/20 p-2">
-                    <span className="eyebrow">informações</span>
-                    <p className="mt-1 text-xs text-[#92959c]">
-                      {pericia.notes || "Nenhuma informação adicional cadastrada."}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-5 grid gap-2 sm:grid-cols-2">
-              {acoes.map((acao) => (
-                <div className="rounded border border-[#30333a] p-3" key={acao.id}>
-                  <strong className="text-sm">{acao.name}</strong>
-                  <p className="mt-1 text-xs text-[#777a82]">
-                    {acao.test} · {acao.damage} · {acao.type}
-                  </p>
-                  <div className="mt-3 rounded border border-[#262930] bg-black/20 p-2">
-                    <span className="eyebrow">informações</span>
-                    <p className="mt-1 text-xs text-[#92959c]">
-                      {acao.description || "Nenhuma informação adicional cadastrada."}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
         <aside className="space-y-4">
           <ResourceConsole initialCharacters={[character]} />
@@ -213,15 +175,6 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
             initialValue={character.meter.value}
             stages={character.meter.stages}
           />
-          <section className="panel rounded-lg p-4">
-            <p className="eyebrow">fraquezas</p>
-            {fraquezas.map((fraqueza) => (
-              <div className="mt-3 rounded border border-[#5b3036] p-3" key={fraqueza.id}>
-                <strong className="text-sm">{fraqueza.name}</strong>
-                <p className="mt-1 text-xs text-[#a08689]">{fraqueza.effect}</p>
-              </div>
-            ))}
-          </section>
         </aside>
       </div>
       <CharacterNotesEditor campaignId={campaignId} characterId={character.id} />

@@ -116,8 +116,9 @@ export const sessionControlSchema = z.object({
 });
 
 const characterSheetFields = [
-  "portrait", "codename", "origin", "class", "path", "nex", "status", "role",
-  "defense", "movement", "attributes", "meter", "conditions",
+  "portrait", "codename", "pronouns", "origin", "class", "path", "nex", "status", "role",
+  "affinities", "description", "tagline", "public_history", "defense", "block", "dodge",
+  "movement", "main_dc", "pe_per_turn", "attributes", "resistances", "meter", "conditions",
 ] as const;
 
 const characterSheetSections = [

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, roleCanAccess } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
 import { characters as demoCharacters } from "@/lib/demo-data";
 import { abilities as demoAbilities, messages as demoMessages } from "@/lib/demo-data";
@@ -13,15 +13,25 @@ type CharacterRow = {
   campaign_id?: string;
   name: string;
   codename: string | null;
+  pronouns: string | null;
   origin: string | null;
   class_name: string | null;
   path_name: string | null;
   narrative_status: string | null;
   team_role: string | null;
+  affinities: string[] | null;
+  short_description: string | null;
+  tagline: string | null;
+  public_history: string | null;
+  character_state: string | null;
+  identification_color: string | null;
   nex: number;
   defense: number;
+  block_value: number | null;
+  dodge_value: number | null;
   movement: number;
   main_dc: number | null;
+  pe_per_turn: number | null;
   version: number;
   portrait_path: string | null;
   character_attributes: {
@@ -30,6 +40,9 @@ type CharacterRow = {
     intellect: number;
     presence: number;
     vigor: number;
+    fortitude: number;
+    reflexes: number;
+    willpower: number;
   } | null;
   character_resources: {
     resource: ResourceKind;
@@ -61,15 +74,25 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
     campaignId: row.campaign_id,
     name: row.name,
     codename: row.codename ?? undefined,
+    pronouns: row.pronouns ?? undefined,
     origin: row.origin ?? "Não informada",
     className: row.class_name ?? "Não informada",
     path: row.path_name ?? "Não informada",
     status: row.narrative_status ?? "sem estado",
     role: row.team_role ?? "sobrevivente",
+    affinities: row.affinities ?? [],
+    shortDescription: row.short_description ?? undefined,
+    tagline: row.tagline ?? undefined,
+    publicHistory: row.public_history ?? undefined,
+    characterState: row.character_state ?? "active",
+    identificationColor: row.identification_color ?? "#b52532",
     nex: row.nex,
     defense: row.defense,
+    blockValue: row.block_value ?? 0,
+    dodgeValue: row.dodge_value ?? 0,
     movement: Number(row.movement),
     mainDc: row.main_dc ?? undefined,
+    pePerTurn: row.pe_per_turn ?? 0,
     version: row.version,
     portraitUrl,
     resources: { pv: resource("pv"), pe: resource("pe"), san: resource("san") },
@@ -79,6 +102,11 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
       int: row.character_attributes?.intellect ?? 1,
       pre: row.character_attributes?.presence ?? 1,
       vig: row.character_attributes?.vigor ?? 1,
+    },
+    resistances: {
+      fortitude: row.character_attributes?.fortitude ?? 0,
+      reflexes: row.character_attributes?.reflexes ?? 0,
+      willpower: row.character_attributes?.willpower ?? 0,
     },
     meter: {
       name: meter?.custom_meter_definitions?.name ?? "Medidor",
@@ -100,8 +128,8 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
 }
 
 const select = `
-  id,campaign_id,name,codename,origin,class_name,path_name,narrative_status,team_role,nex,defense,movement,main_dc,version,portrait_path,
-  character_attributes(agility,strength,intellect,presence,vigor),
+  id,campaign_id,name,codename,pronouns,origin,class_name,path_name,narrative_status,team_role,affinities,short_description,tagline,public_history,character_state,identification_color,nex,defense,block_value,dodge_value,movement,main_dc,pe_per_turn,version,portrait_path,
+  character_attributes(agility,strength,intellect,presence,vigor,fortitude,reflexes,willpower),
   character_resources(resource,current_value,maximum_value),
   character_meter_values(current_value,custom_meter_definitions(name,stages)),
   character_conditions(removed_at,condition_definitions(name)),
@@ -190,13 +218,16 @@ export async function getAuthorizedCharacter(characterId: string) {
     return demoCharacters.find((character) => character.id === characterId) ?? demoCharacters[0];
   }
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("characters")
-    .select(select)
-    .eq("id", characterId)
-    .maybeSingle();
-  if (error) throw new Error(`Falha ao carregar ficha: ${error.message}`);
-  if (data) return (await mapCharactersWithPortraits(supabase, [data as unknown as CharacterRow]))[0];
+  const user = await getCurrentUser();
+  if (user && roleCanAccess(user.role, "master")) {
+    const { data, error } = await supabase
+      .from("characters")
+      .select(select)
+      .eq("id", characterId)
+      .maybeSingle();
+    if (error) throw new Error(`Falha ao carregar ficha: ${error.message}`);
+    if (data) return (await mapCharactersWithPortraits(supabase, [data as unknown as CharacterRow]))[0];
+  }
   const { data: protectedSheet, error: protectedError } = await supabase.rpc(
     "get_player_character_sheet",
     { p_character_id: characterId },
