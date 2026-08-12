@@ -8,13 +8,15 @@ import { getAuthorizedCharacters, getAuthorizedNotifications } from "@/server/re
 import { getCurrentSession } from "@/server/repositories/session-repository";
 
 export const dynamic = "force-dynamic";
+const demoCampaignId = "11111111-1111-4111-8111-111111111111";
 
 export default async function PlayerLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser("/app", "player");
   if (!roleCanAccess(user.role, "player")) redirect("/login");
   const [authorizedCharacters, notifications] = await Promise.all([getAuthorizedCharacters(), getAuthorizedNotifications()]);
   const character = authorizedCharacters[0];
-  const session = character?.campaignId ? await getCurrentSession(character.campaignId) : null;
+  const campaignId = character?.campaignId ?? demoCampaignId;
+  const session = character ? await getCurrentSession(campaignId) : null;
   return (
     <TerminalShell
       user={user}
@@ -22,9 +24,9 @@ export default async function PlayerLayout({ children }: { children: React.React
       playerNavigation={character ? { characterId: character.id, visibleSections: getCharacterSheetVisibility(character).sections, sessionId: session?.id } : undefined}
       notifications={notifications}
     >
-      {character?.campaignId && session && (
+      {character && session && (
         <SessionPresence
-          campaignId={character.campaignId}
+          campaignId={campaignId}
           sessionId={session.id}
           characterId={character.id}
         />

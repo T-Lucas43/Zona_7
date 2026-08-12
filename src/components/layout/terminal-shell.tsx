@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,7 @@ import {
   Home,
   Mail,
   Map,
+  Menu,
   MessageSquare,
   NotebookPen,
   Radio,
@@ -23,6 +25,7 @@ import {
   UserRoundCog,
   Users,
   Waypoints,
+  X,
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { CommandPalette } from "@/components/master/command-palette";
@@ -54,16 +57,18 @@ const getMasterLinks = (campaignId: string) =>
   ] as const;
 
 const getPlayerLinks = (characterId: string, visibleSections: string[], sessionId?: string) =>
-  ([
-    ["/app", "Início", Home],
-    [`/app/characters/${characterId}`, "Minha ficha", CircleUserRound],
-    [`/app/characters/${characterId}/inventory`, "Inventário", Boxes],
-    [`/app/characters/${characterId}/abilities`, "Habilidades", Gauge],
-    [`/app/characters/${characterId}/messages`, "Mensagens", Mail],
-    [`/app/characters/${characterId}/handouts`, "Pistas", BookOpen],
-    [`/app/characters/${characterId}/notebook`, "Livro de anotações", NotebookPen],
-    ...(sessionId ? [[`/app/session/${sessionId}`, "Sala ao vivo", Dices] as const] : []),
-  ] as const).filter(([href]) => {
+  (
+    [
+      ["/app", "Início", Home],
+      [`/app/characters/${characterId}`, "Minha ficha", CircleUserRound],
+      [`/app/characters/${characterId}/inventory`, "Inventário", Boxes],
+      [`/app/characters/${characterId}/abilities`, "Habilidades", Gauge],
+      [`/app/characters/${characterId}/messages`, "Mensagens", Mail],
+      [`/app/characters/${characterId}/handouts`, "Pistas", BookOpen],
+      [`/app/characters/${characterId}/notebook`, "Livro de anotações", NotebookPen],
+      ...(sessionId ? [[`/app/session/${sessionId}`, "Sala ao vivo", Dices] as const] : []),
+    ] as const
+  ).filter(([href]) => {
     const section = href.match(/\/characters\/[^/]+\/([^/]+)/)?.[1];
     return !section || section === "notebook" || visibleSections.includes(section);
   });
@@ -82,21 +87,36 @@ export function TerminalShell({
   notifications?: PlayerNotification[];
 }) {
   const pathname = usePathname();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const campaignId = pathname.match(/\/master\/campaigns\/([^/]+)/)?.[1] ?? defaultCampaignId;
-  const characterId = playerNavigation?.characterId ?? pathname.match(/\/app\/characters\/([^/]+)/)?.[1] ?? "davi";
-  const links = area === "master" ? getMasterLinks(campaignId) : getPlayerLinks(characterId, playerNavigation?.visibleSections ?? [], playerNavigation?.sessionId);
-  const mobileLinks = area === "master" ? links.slice(0, 5) : links.slice(1, 6);
+  const characterId =
+    playerNavigation?.characterId ?? pathname.match(/\/app\/characters\/([^/]+)/)?.[1] ?? "davi";
+  const links =
+    area === "master"
+      ? getMasterLinks(campaignId)
+      : getPlayerLinks(
+          characterId,
+          playerNavigation?.visibleSections ?? [],
+          playerNavigation?.sessionId,
+        );
+  const sessionWorkspace = area === "master" && pathname.includes("/sessions");
   const isActive = (href: string) => {
     if (href === "/master" || href === "/app") return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   };
   return (
-    <div className="app-frame terminal-grid">
+    <div className="app-frame terminal-grid" data-session-workspace={sessionWorkspace}>
       <aside className="app-sidebar" aria-label="Navegação principal">
         <Brand />
         <nav className="sidebar-nav">
           {links.map(([href, label, Icon]) => (
-            <Link href={href} key={href} className="sidebar-link" data-active={isActive(href)} aria-current={isActive(href) ? "page" : undefined}>
+            <Link
+              href={href}
+              key={href}
+              className="sidebar-link"
+              data-active={isActive(href)}
+              aria-current={isActive(href) ? "page" : undefined}
+            >
               <Icon size={17} aria-hidden="true" /> {label}
             </Link>
           ))}
@@ -128,25 +148,84 @@ export function TerminalShell({
               {area === "master" ? "console do mestre" : "terminal do sobrevivente"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="app-topbar-actions flex items-center gap-2">
             <NotificationBell initial={notifications} userId={user.id} />
             <UserProfileMenu user={user} showInstall={area === "player"} />
-            <span className="tag">
+            <span className="tag mobile-topbar-status">
               <span className="status-dot" /> Canal seguro
             </span>
-            <span className="tag hidden sm:inline-flex">Belém · UTC−3</span>
+            <span className="tag mobile-topbar-time hidden sm:inline-flex">Belém · UTC−3</span>
+            <button
+              className="mobile-menu-trigger"
+              type="button"
+              aria-label={mobileMenuOpen ? "Fechar menu de navegação" : "Abrir menu de navegação"}
+              aria-controls="menu-navegacao-mobile"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen((open) => !open)}
+            >
+              {mobileMenuOpen ? <X size={19} /> : <Menu size={20} />}
+            </button>
           </div>
         </header>
         {children}
       </main>
-      <nav className="mobile-nav" aria-label="Navegação móvel">
-        {mobileLinks.map(([href, label, Icon]) => (
-          <Link href={href} key={href} data-active={isActive(href)} aria-current={isActive(href) ? "page" : undefined}>
-            <Icon size={19} aria-hidden="true" />
-            <span>{label}</span>
-          </Link>
-        ))}
-      </nav>
+      {mobileMenuOpen && (
+        <>
+          <button
+            className="mobile-menu-backdrop"
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside
+            id="menu-navegacao-mobile"
+            className="mobile-menu-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={area === "master" ? "Menu do mestre" : "Menu do jogador"}
+          >
+            <div className="mobile-menu-heading">
+              <div>
+                <p className="eyebrow">
+                  {area === "master" ? "console do mestre" : "terminal do sobrevivente"}
+                </p>
+                <h2>{area === "master" ? "Todas as telas" : "Menu do jogador"}</h2>
+              </div>
+              <button
+                className="btn px-3"
+                type="button"
+                aria-label="Fechar menu de navegação"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <nav className="mobile-menu-links" aria-label="Navegação móvel">
+              {links.map(([href, label, Icon]) => (
+                <Link
+                  href={href}
+                  key={href}
+                  data-active={isActive(href)}
+                  aria-current={isActive(href) ? "page" : undefined}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <span className="mobile-menu-link-icon">
+                    <Icon size={18} aria-hidden="true" />
+                  </span>
+                  <span>{label}</span>
+                  {isActive(href) && <span className="mobile-menu-current">atual</span>}
+                </Link>
+              ))}
+            </nav>
+            <div className="mobile-menu-footer">
+              <span>
+                <span className="status-dot" /> Canal seguro
+              </span>
+              <span>Belém · UTC−3</span>
+            </div>
+          </aside>
+        </>
+      )}
       <CommandPalette enabled={area === "master"} />
     </div>
   );
