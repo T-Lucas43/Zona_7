@@ -161,6 +161,7 @@ export function MapStudio({
                 <span className="map-token-head" style={{ backgroundColor: token.cor, ...portraitStyle }} data-portrait={portraitStyle ? "true" : "false"}>
                   {!portraitStyle && token.nome.slice(0, 2).toUpperCase()}
                 </span>
+                {token.characterState === "dead" && <span className="absolute left-1/2 top-[28%] z-30 -translate-x-1/2 text-5xl font-black leading-none text-[#ff3345] drop-shadow-[0_2px_4px_#000]" aria-label="Personagem morto">×</span>}
                 <span className="map-token-name">{token.nome}</span>
               </button>
               );

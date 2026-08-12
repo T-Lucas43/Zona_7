@@ -21,6 +21,7 @@ import { MessagingStudio } from "@/components/master/messaging-studio";
 import { MeterControl } from "@/components/master/meter-control";
 import { ResourceConsole } from "@/components/master/resource-console";
 import { SessionHub } from "@/components/master/session-hub";
+import { SessionItemManager } from "@/components/master/session-item-manager";
 import { ScriptStudio } from "@/components/master/script-studio";
 import {
   getCampaignCharacters,
@@ -31,6 +32,7 @@ import {
   getCharacterSkills,
   getCharacterWeaknesses,
   getCharacterInventory,
+  getSessionAbilityRequests,
 } from "@/server/repositories/character-repository";
 import {
   getAtores,
@@ -42,6 +44,8 @@ import {
   getNomeCampanha,
   getPersonalizacao,
   getPistas,
+  getItensDaCampanha,
+  getSessionSceneState,
   getRegras,
   getRemetentes,
   getRoteiros,
@@ -85,9 +89,10 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
       </div>
     );
   }
-  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis, execucaoRoteiro, encontros, atores] = await Promise.all([
+  const sceneState = await getSessionSceneState(session.id);
+  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis, execucaoRoteiro, encontros, atores, itens, pistas, solicitacoes] = await Promise.all([
     getSessionCharacters(campaignId, session.id),
-    getCenaPrincipal(campaignId),
+    getCenaPrincipal(campaignId, sceneState.sceneId),
     getContasDaCampanha(campaignId, false),
     getRemetentes(campaignId),
     getRoteiros(campaignId),
@@ -96,10 +101,14 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
     getSessionScriptRun(session.id),
     getEncontros(campaignId),
     getAtores(campaignId),
+    getItensDaCampanha(campaignId),
+    getPistas(campaignId),
+    getSessionAbilityRequests(session.id),
   ]);
   const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
   return (
     <SessionHub
+      key={JSON.stringify([session.status, session.round, cena.backgroundUrl, cena.tokens.map((token) => [token.id, token.x, token.y, token.visivel, token.characterState]), execucaoRoteiro?.runId, execucaoRoteiro?.sequence, elenco.map((character) => [character.id, character.version, character.characterState, character.attributes, character.resources]), solicitacoes.map((request) => [request.id, request.decision, request.rolled]), sceneState.enabled])}
       campaignId={campaignId}
       session={session}
       initialPublicState={estadoPublico}
@@ -112,6 +121,10 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
       initialScriptRun={execucaoRoteiro}
       encounters={encontros}
       actors={atores}
+      items={itens}
+      handouts={pistas}
+      initialAbilityRequests={solicitacoes}
+      initialSceneSyncEnabled={sceneState.enabled}
       visibleCharacterIds={atoresVisiveis.flatMap((ator) => ator.characterId && elenco.some((character) => character.id === ator.characterId) ? [ator.characterId] : [])}
     />
   );
@@ -208,13 +221,14 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     maps: "Mapas e tokens",
     collective: "Tela coletiva",
     actors: "Atores controlados pelo mestre",
+    items: "Itens da sessão",
     scripts: "Roteiros e automações",
   };
   const title = titles[area] ?? "Console da campanha";
   const needsCharacters = area === "characters" || area === "members" || area === "messages";
   const needsAccounts = area === "members" || area === "messages" || area === "characters";
   const needsScene = area === "maps" || area === "collective" || area === "actors";
-  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, regras, auditoria] =
+  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, itens, regras, auditoria] =
     await Promise.all([
       getNomeCampanha(campaignId),
       needsCharacters ? getCampaignCharacters(campaignId) : Promise.resolve([]),
@@ -227,6 +241,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
       area === "encounters" ? getEncontros(campaignId) : Promise.resolve([]),
       area === "messages" ? getMensagensDaCampanha(campaignId) : Promise.resolve([]),
       area === "handouts" ? getPistas(campaignId) : Promise.resolve([]),
+      area === "items" ? getItensDaCampanha(campaignId) : Promise.resolve([]),
       area === "rules" ? getRegras(campaignId) : Promise.resolve(null),
       area === "audit" ? getEventosAuditoria(campaignId) : Promise.resolve([]),
     ]);
@@ -268,6 +283,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         </div>
       )}
       {area === "handouts" && <HandoutManager campaignId={campaignId} initialItems={pistas} />}
+      {area === "items" && <SessionItemManager campaignId={campaignId} initialItems={itens} />}
       {area === "rules" && (
         regras ? <div className="mt-6 grid gap-4 md:grid-cols-2">
           <section className="panel rounded-lg p-5">

@@ -6,6 +6,7 @@ import {
   Archive,
   BookOpen,
   Boxes,
+  PackageSearch,
   CircleUserRound,
   Dices,
   Gauge,
@@ -25,8 +26,11 @@ import {
 import { Brand } from "@/components/brand";
 import { CommandPalette } from "@/components/master/command-palette";
 import { PwaInstallCard } from "@/components/player/pwa-install-card";
+import { NotificationBell } from "@/components/player/notification-bell";
+import { UserProfileMenu } from "@/components/layout/user-profile-menu";
 import { signOutAction } from "@/server/actions/auth";
 import type { AuthenticatedUser } from "@/types/domain";
+import type { PlayerNotification } from "@/server/repositories/character-repository";
 
 const defaultCampaignId = "11111111-1111-4111-8111-111111111111";
 
@@ -39,6 +43,7 @@ const getMasterLinks = (campaignId: string) =>
     [`/master/campaigns/${campaignId}/encounters`, "Encontros", Swords],
     [`/master/campaigns/${campaignId}/messages`, "Mensagens", MessageSquare],
     [`/master/campaigns/${campaignId}/handouts`, "Pistas", Archive],
+    [`/master/campaigns/${campaignId}/items`, "Itens da sessão", PackageSearch],
     [`/master/campaigns/${campaignId}/maps`, "Mapas e tokens", Map],
     [`/master/campaigns/${campaignId}/actors`, "Entidades e NPCs", Sparkles],
     [`/master/campaigns/${campaignId}/scripts`, "Roteiros", Waypoints],
@@ -65,11 +70,13 @@ export function TerminalShell({
   area,
   children,
   playerNavigation,
+  notifications = [],
 }: {
   user: AuthenticatedUser;
   area: "master" | "player";
   children: React.ReactNode;
   playerNavigation?: { characterId: string; visibleSections: string[]; sessionId?: string };
+  notifications?: PlayerNotification[];
 }) {
   const pathname = usePathname();
   const campaignId = pathname.match(/\/master\/campaigns\/([^/]+)/)?.[1] ?? defaultCampaignId;
@@ -119,6 +126,8 @@ export function TerminalShell({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationBell initial={notifications} />
+            <UserProfileMenu user={user} showInstall={area === "player"} />
             <span className="tag">
               <span className="status-dot" /> Canal seguro
             </span>

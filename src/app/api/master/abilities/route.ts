@@ -24,6 +24,13 @@ const schema = z.object({
     "disabled",
     "lost",
   ]),
+  useCriteria: z.string().trim().min(2).max(2_000),
+  application: z.string().trim().min(2).max(2_000),
+  testFormula: z.string().trim().min(2).max(80),
+  difficulty: z.number().int().min(0).max(999).optional(),
+  successEffect: z.string().trim().min(2).max(4_000),
+  partialEffect: z.string().trim().max(4_000).optional(),
+  failureEffect: z.string().trim().min(2).max(4_000),
 });
 
 export async function POST(request: Request) {

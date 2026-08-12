@@ -9,9 +9,23 @@ export async function rollDice(input: unknown, actorUserId: string) {
   if (!isSupabaseConfigured) return { ...result, id: crypto.randomUUID(), demo: true };
 
   const supabase = await createClient();
+  if (request.characterId) {
+    const { data: character } = await supabase.from("characters").select("character_state").eq("id", request.characterId).maybeSingle();
+    if (["dying", "dead"].includes(character?.character_state ?? ""))
+      throw new Error("O personagem está sem ações neste estado.");
+  }
+  let campaignId: string | null = null;
+  if (request.sessionId) {
+    const { data } = await supabase.from("sessions").select("campaign_id").eq("id", request.sessionId).maybeSingle();
+    campaignId = data?.campaign_id ?? null;
+  } else if (request.characterId) {
+    const { data } = await supabase.from("characters").select("campaign_id").eq("id", request.characterId).maybeSingle();
+    campaignId = data?.campaign_id ?? null;
+  }
   const { data, error } = await supabase
     .from("dice_rolls")
     .insert({
+      campaign_id: campaignId,
       user_id: actorUserId,
       character_id: request.characterId ?? null,
       session_id: request.sessionId ?? null,

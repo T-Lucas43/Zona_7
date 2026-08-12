@@ -8,6 +8,7 @@ const encounterFields = z.object({
   status: z.enum(["draft", "active", "paused", "ended"]),
   round: z.number().int().min(0).max(9999),
   notes: z.string().trim().max(20_000),
+  sessionId: z.uuid().nullable().optional(),
 });
 
 const schema = z.discriminatedUnion("action", [
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
       status: input.status,
       round: input.round,
       gm_notes: input.notes || null,
+      session_id: input.sessionId ?? null,
+      started_at: input.status === "active" ? new Date().toISOString() : null,
+      ended_at: input.status === "ended" ? new Date().toISOString() : null,
     };
     const query = input.action === "create"
       ? supabase.from("encounters").insert({ campaign_id: input.campaignId, ...values })

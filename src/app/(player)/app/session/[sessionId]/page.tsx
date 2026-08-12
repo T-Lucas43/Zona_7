@@ -1,111 +1,65 @@
-import { Radio, Swords, Users } from "lucide-react";
+import { EyeOff, Package, Radio, Skull, Sparkles, Swords, Users } from "lucide-react";
 import { DiceRoller } from "@/components/dice/dice-roller";
+import { AbilityDetails } from "@/components/character/ability-details";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { LiveSync } from "@/components/live-sync";
 import { MapStudio } from "@/components/master/map-studio";
 import { SessionClock } from "@/components/master/session-clock";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
+import { AbilityRequestButton } from "@/components/player/ability-request-button";
+import { InventoryActions } from "@/components/player/inventory-actions";
+import { LiveNotificationOverlay } from "@/components/player/live-notification-overlay";
+import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { SessionPresence } from "@/components/player/session-presence";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
-import { getAuthorizedCharacters, getAuthorizedMessages } from "@/server/repositories/character-repository";
-import { getCenaPrincipal } from "@/server/repositories/master-repository";
+import {
+  getAuthorizedCharacters, getAuthorizedMessages, getAuthorizedNotifications, getCharacterAbilities,
+  getCharacterInventory, getSessionAbilityRequests, getSessionDiceRolls,
+} from "@/server/repositories/character-repository";
+import { getCenaPrincipal, getSessionSceneState } from "@/server/repositories/master-repository";
 import { demoCampaignId, getCurrentSession, getSessionCast, getSessionInitiative, getSessionPublicState } from "@/server/repositories/session-repository";
 import { notFound } from "next/navigation";
 
-export default async function PlayerSessionPage({
-  params,
-}: {
-  params: Promise<{ sessionId: string }>;
-}) {
+export default async function PlayerSessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   const session = await getCurrentSession(undefined, sessionId);
   if (!session) notFound();
   const campaignId = session.campaignId ?? demoCampaignId;
-  const [characters, publicState, cast, scene, authorizedMessages, initiative] = await Promise.all([
-    getAuthorizedCharacters(),
-    getSessionPublicState(campaignId, session.id),
-    getSessionCast(campaignId),
-    getCenaPrincipal(campaignId),
-    getAuthorizedMessages(),
-    getSessionInitiative(session.id),
-  ]);
+  const [characters, sceneState] = await Promise.all([getAuthorizedCharacters(), getSessionSceneState(session.id)]);
   const character = characters[0];
   if (!character) return <section className="panel rounded-lg p-5"><h1 className="text-2xl font-black">Ficha não vinculada</h1></section>;
-  return (
-    <div>
-      <SessionPresence campaignId={campaignId} sessionId={session.id} characterId={character.id} />
-      <LiveSync campaignId={publicState.campaignId} />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="eyebrow">sala ao vivo // rodada {session.round}</p>
-          <h1 className="mt-1 text-3xl font-black">{publicState.sceneTitle || session.scene}</h1>
-        </div>
-        <RealtimeIndicator channel={`session:${session.id}`} />
+  const [publicState, cast, scene, authorizedMessages, initiative, abilities, inventory, notifications, requests, rolls] = await Promise.all([
+    getSessionPublicState(campaignId, session.id), getSessionCast(campaignId),
+    getCenaPrincipal(campaignId, sceneState.sceneId), getAuthorizedMessages(), getSessionInitiative(session.id),
+    getCharacterAbilities(character.id), getCharacterInventory(character.id), getAuthorizedNotifications(),
+    getSessionAbilityRequests(session.id), getSessionDiceRolls(session.id),
+  ]);
+  const disabled = ["dying", "dead"].includes(character.characterState ?? "");
+  const targets = cast.flatMap((member) => member.characterId && member.characterId !== character.id ? [{ id: member.characterId, name: member.name }] : []);
+  const visibleEntities = scene.tokens.filter((token) => token.actorType !== "player_character" && token.visivel);
+  return <div>
+    <SessionPresence campaignId={campaignId} sessionId={session.id} characterId={character.id} />
+    <LiveSync campaignId={campaignId} />
+    <LiveNotificationOverlay notifications={notifications} />
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">sala ao vivo // rodada {session.round}</p><h1 className="mt-1 text-3xl font-black">{publicState.sceneTitle || session.scene}</h1></div><RealtimeIndicator channel={`session:${session.id}`} /></div>
+    {character.characterState === "dying" && <section className="mt-5 rounded-xl border border-[#a46d2b] bg-[#7a4516]/20 p-6 text-center"><h2 className="text-3xl font-black text-[#f0bd72]">Você está quase morto</h2><p className="mt-2 text-sm text-[#d7b98e]">Seu PV chegou a zero. Você está sem ações até a decisão do mestre.</p></section>}
+    {character.characterState === "dead" && <section className="mt-5 rounded-xl border border-[#a72e3b] bg-[#711722]/25 p-6 text-center"><Skull className="mx-auto text-[#ff6977]" size={36} /><h2 className="mt-3 text-3xl font-black text-[#ff7b88]">Você morreu</h2><p className="mt-2 text-sm text-[#d7a4a9]">O mestre declarou a morte do personagem. Seu token está marcado no mapa.</p></section>}
+    <div className="mt-6">{sceneState.enabled ? <MapStudio key={JSON.stringify([scene.backgroundUrl, scene.tokens.map((token) => [token.id, token.x, token.y, token.visivel, token.characterState])])} campaignId={campaignId} initialScene={scene} collective /> : <section className="panel grid min-h-80 place-items-center rounded-lg p-6 text-center"><div><EyeOff className="mx-auto text-[#e8c16d]" size={36} /><h2 className="mt-4 text-xl font-black">Cena temporariamente dessincronizada</h2><p className="mt-2 text-sm text-[#92959c]">O mestre está preparando o próximo cenário. A atualização aparecerá automaticamente.</p></div></section>}</div>
+    {visibleEntities.length > 0 && <section className="panel mt-4 rounded-lg p-4"><p className="eyebrow">presenças na cena</p><div className="mt-3 flex flex-wrap gap-2">{visibleEntities.map((token) => <span className="tag" key={token.id}><Sparkles size={11} /> {token.nome}</span>)}</div></section>}
+    <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.62fr]">
+      <div className="space-y-4">
+        <section className="panel rounded-lg border-[#5d2a31] p-5"><div className="flex items-center justify-between"><span className="tag border-[#63323a] text-[#ed919a]"><Radio size={12} /> {session.status.toUpperCase()}</span><span className="font-mono text-xs text-[#777a81]">R{session.round}</span></div><h2 className="mt-5 text-2xl font-black">Informações públicas da sessão</h2><p className="mt-2 text-sm text-[#999ca3]">{publicState.publicSummary || "O mestre ainda não publicou um resumo para esta cena."}</p><p className="mt-3 rounded border border-[#30333a] p-3 text-sm"><strong>Objetivo:</strong> {publicState.publicObjective || "Ainda não publicado."}</p></section>
+        <DiceRoller characterId={character.id} sessionId={session.id} disabledReason={disabled ? "O personagem está sem ações neste estado." : undefined} />
+        <LiveRollFeed rolls={rolls} />
+        {isCharacterSectionVisible(character, "abilities") && <section className="panel rounded-lg p-5"><div className="flex items-center gap-2"><Sparkles size={17} className="text-[#d94a57]" /><h2 className="font-extrabold">Solicitar habilidades</h2></div><div className="mt-4 grid gap-3 md:grid-cols-2">{abilities.filter((ability) => ability.state === "unlocked").map((ability) => { const request = requests.find((item) => item.characterAbilityId === ability.id); return <article className="rounded border border-[#30333a] p-4" key={ability.id}><strong>{ability.name}</strong><p className="mt-2 text-xs leading-5 text-[#92959c]">{ability.description}</p><AbilityDetails ability={ability} />{!disabled && <AbilityRequestButton campaignId={campaignId} sessionId={session.id} characterId={character.id} abilityId={ability.id} pendingRequest={request ? { id: request.id, decision: request.decision, rolled: request.rolled } : undefined} />}</article>; })}{abilities.length === 0 && <p className="text-sm text-[#777a82]">Nenhuma habilidade liberada.</p>}</div></section>}
+        {isCharacterSectionVisible(character, "inventory") && <section className="panel rounded-lg p-5"><div className="flex items-center gap-2"><Package size={17} className="text-[#d94a57]" /><h2 className="font-extrabold">Inventário na sessão</h2></div><div className="mt-4 grid gap-3 md:grid-cols-2">{inventory.map((item) => <article className="rounded border border-[#30333a] p-4" key={item.id}><div className="flex justify-between gap-2"><strong>{item.name}</strong><span className="tag">{item.state}</span></div><p className="mt-2 text-xs text-[#92959c]">{item.description || item.detail}</p>{!disabled && <InventoryActions characterItemId={item.id} targets={targets} />}</article>)}{inventory.length === 0 && <p className="text-sm text-[#777a82]">Inventário vazio.</p>}</div></section>}
+        {isCharacterSectionVisible(character, "messages") && authorizedMessages[0] && <section className="panel rounded-lg p-5"><p className="eyebrow">sinal recebido</p><h2 className="mt-3 font-extrabold">{authorizedMessages[0].sender}</h2><p className="mt-3 text-sm leading-6 text-[#b8bac0]">{authorizedMessages[0].body}</p></section>}
+        {isCharacterSectionVisible(character, "resources") && <section className="panel rounded-lg p-5"><div className="flex items-center gap-2"><Users size={17} className="text-[#d94a57]" /><h2 className="font-extrabold">Personagens visíveis</h2></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{cast.map((member) => <div className="rounded border border-[#30333a] p-3" key={member.id}><div className="flex items-center gap-2"><span className="size-2 rounded-full" style={{ background: member.color }} /><strong className="text-sm">{member.name}</strong></div><p className="mt-1 text-xs text-[#858891]">{member.description}</p></div>)}</div></section>}
       </div>
-      <div className="mt-6"><MapStudio campaignId={publicState.campaignId} initialScene={scene} collective /></div>
-      <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_0.62fr]">
-        <div className="space-y-4">
-          <section className="panel rounded-lg border-[#5d2a31] p-5">
-            <div className="flex items-center justify-between">
-              <span className="tag border-[#63323a] text-[#ed919a]">
-                <Radio size={12} /> {session.status.toUpperCase()}
-              </span>
-              <span className="font-mono text-xs text-[#777a81]">R{session.round}</span>
-            </div>
-            <h2 className="mt-5 text-2xl font-black">Informações públicas da sessão</h2>
-            <p className="mt-2 text-sm text-[#999ca3]">{publicState.publicSummary || "O mestre ainda não publicou um resumo para esta cena."}</p>
-            <p className="mt-3 rounded border border-[#30333a] p-3 text-sm"><strong>Objetivo:</strong> {publicState.publicObjective || "Ainda não publicado."}</p>
-          </section>
-          <DiceRoller />
-          {isCharacterSectionVisible(character, "messages") && authorizedMessages[0] && <section className="panel rounded-lg p-5">
-            <p className="eyebrow">sinal recebido</p>
-            <h2 className="mt-3 font-extrabold">{authorizedMessages[0].sender}</h2>
-            <p className="mt-3 text-sm leading-6 text-[#b8bac0]">{authorizedMessages[0].body}</p>
-          </section>}
-          {isCharacterSectionVisible(character, "resources") && <section className="panel rounded-lg p-5">
-            <div className="flex items-center gap-2"><Users size={17} className="text-[#d94a57]" /><h2 className="font-extrabold">Personagens visíveis</h2></div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">{cast.map((member) => <div className="rounded border border-[#30333a] p-3" key={member.id}><div className="flex items-center gap-2"><span className="size-2 rounded-full" style={{ background: member.color }} /><strong className="text-sm">{member.name}</strong></div><p className="mt-1 text-xs text-[#858891]">{member.description}</p></div>)}</div>
-          </section>}
-        </div>
-        <div className="space-y-4">
-          <section className="panel rounded-lg p-5">
-            <p className="eyebrow">estado atual</p>
-            <div className="mt-2 flex items-center gap-3"><CharacterPortrait name={character.name} portraitUrl={character.portraitUrl} className="size-12 rounded-full" /><h2 className="text-xl font-extrabold">{character.name}</h2></div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {Object.values(character.resources).map((resource) => (
-                <div
-                  key={resource.kind}
-                  className="rounded border border-[#30333a] p-3 text-center"
-                >
-                  <span className="font-mono text-[0.65rem] uppercase text-[#767980]">
-                    {resource.kind}
-                  </span>
-                  <strong className="mt-1 block text-xl">{resource.current}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="panel rounded-lg p-5">
-            <div className="flex items-center gap-2">
-              <Swords size={17} className="text-[#d94a57]" />
-              <h2 className="font-extrabold">Iniciativa</h2>
-            </div>
-            <ol className="mt-4 space-y-2">
-              {initiative.map((entry) => (
-                <li
-                  key={entry.id}
-                  className={`flex items-center justify-between rounded px-3 py-2 text-sm ${entry.active ? "bg-[#8a1b27]/25 text-white" : "bg-white/[0.025] text-[#9b9ea5]"}`}
-                >
-                  <span>{entry.name}</span>
-                  <strong>{entry.value ?? "—"}</strong>
-                </li>
-              ))}
-              {initiative.length === 0 && <li className="text-sm text-[#777a82]">Nenhum encontro ativo.</li>}
-            </ol>
-          </section>
-          <SessionClock initialElapsedSeconds={session.elapsedSeconds ?? 0} initialTimerStartedAt={session.timerStartedAt} initialStatus={session.status} />
-        </div>
+      <div className="space-y-4"><section className="panel rounded-lg p-5"><p className="eyebrow">estado atual</p><div className="mt-2 flex items-center gap-3"><CharacterPortrait name={character.name} portraitUrl={character.portraitUrl} className="size-12 rounded-full" /><h2 className="text-xl font-extrabold">{character.name}</h2></div><div className="mt-4 grid grid-cols-3 gap-2">{Object.values(character.resources).map((resource) => <div key={resource.kind} className="rounded border border-[#30333a] p-3 text-center"><span className="font-mono text-[0.65rem] uppercase text-[#767980]">{resource.kind}</span><strong className="mt-1 block text-xl">{resource.current}/{resource.maximum}</strong></div>)}</div></section>
+        <section className="panel rounded-lg p-5"><div className="flex items-center gap-2"><Swords size={17} className="text-[#d94a57]" /><h2 className="font-extrabold">Iniciativa</h2></div><ol className="mt-4 space-y-2">{initiative.map((entry) => <li key={entry.id} className={`flex items-center justify-between rounded px-3 py-2 text-sm ${entry.active ? "bg-[#8a1b27]/25 text-white" : "bg-white/[0.025] text-[#9b9ea5]"}`}><span>{entry.name}</span><strong>{entry.value ?? "—"}</strong></li>)}{initiative.length === 0 && <li className="text-sm text-[#777a82]">Nenhum encontro ativo.</li>}</ol></section>
+        <SessionClock initialElapsedSeconds={session.elapsedSeconds ?? 0} initialTimerStartedAt={session.timerStartedAt} initialStatus={session.status} />
       </div>
     </div>
-  );
+  </div>;
 }

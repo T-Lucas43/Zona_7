@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CircleStop, Pause, Play, RadioTower, Route, Sparkles } from "lucide-react";
 import type { RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
@@ -16,11 +16,13 @@ const statusLabels: Record<string, string> = {
 
 export function SessionScriptControl({
   campaignId,
+  sessionId,
   sessionStatus,
   scripts,
   initialRun,
 }: {
   campaignId: string;
+  sessionId: string;
   sessionStatus: string;
   scripts: RoteiroDaCampanha[];
   initialRun: SessionScriptRun | null;
@@ -29,6 +31,17 @@ export function SessionScriptControl({
   const [run, setRun] = useState(initialRun);
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  useEffect(() => {
+    const reset = (event: Event) => {
+      const detail = (event as CustomEvent<{ scriptStatus?: string }>).detail;
+      if (detail?.scriptStatus === "awaiting_new_run") {
+        setRun(null);
+        setSelectedScript(scripts[0]?.id ?? "");
+      }
+    };
+    window.addEventListener("z7:session-control", reset);
+    return () => window.removeEventListener("z7:session-control", reset);
+  }, [scripts]);
 
   async function control(
     action: "start" | "advance" | "pause" | "resume" | "improvise" | "complete",
@@ -41,6 +54,7 @@ export function SessionScriptControl({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         campaignId,
+        sessionId,
         action,
         scriptPackageId: action === "start" ? selectedScript : undefined,
         runId: action === "start" ? undefined : run?.runId,
@@ -113,7 +127,7 @@ export function SessionScriptControl({
             )}
             <button className="btn" type="button" disabled={pending || run.status === "completed"} onClick={() => void control("improvise")}><Sparkles size={14} /> Improvisar</button>
             <button className="btn" type="button" disabled={pending || run.status === "completed"} onClick={() => void control("complete")}><CircleStop size={14} /> Encerrar roteiro</button>
-            {run.status === "completed" && <button className="btn btn-primary" type="button" onClick={() => { setRun(null); setNotice("Selecione o roteiro da próxima execução."); }}><Play size={14} /> Iniciar nova execução</button>}
+            {run.status === "completed" && <button className="btn btn-primary" type="button" onClick={() => { setRun(null); setSelectedScript(scripts[0]?.id ?? ""); setNotice("Selecione o roteiro publicado mais recente para a próxima execução."); }}><Play size={14} /> Iniciar nova execução</button>}
           </div>
         </div>
       )}

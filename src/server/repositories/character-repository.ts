@@ -243,7 +243,7 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
   const { data, error } = await supabase
     .from("character_abilities")
     .select(
-      "id,state,character_id,public_override,abilities(id,name,public_description,action_type,costs,usage_limit,recommended_nex)",
+      "id,state,character_id,public_override,abilities(id,name,public_description,action_type,costs,usage_limit,recommended_nex,use_criteria,application_text,test_formula,difficulty,success_effect,partial_effect,failure_effect)",
     )
     .eq("character_id", characterId);
   if (error) throw new Error(`Falha ao carregar habilidades: ${error.message}`);
@@ -261,6 +261,13 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
         costs: Partial<Record<ResourceKind, string>>;
         usage_limit: { scope?: string; count?: number } | null;
         recommended_nex: number;
+        use_criteria: string | null;
+        application_text: string | null;
+        test_formula: string | null;
+        difficulty: number | null;
+        success_effect: string | null;
+        partial_effect: string | null;
+        failure_effect: string | null;
       } | null;
     }>
   ).flatMap((link) =>
@@ -278,6 +285,13 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
               ? `${link.abilities.usage_limit.count}/${link.abilities.usage_limit.scope ?? "cena"}`
               : undefined,
             recommendedNex: link.abilities.recommended_nex,
+            useCriteria: link.abilities.use_criteria ?? undefined,
+            application: link.abilities.application_text ?? undefined,
+            testFormula: link.abilities.test_formula ?? undefined,
+            difficulty: link.abilities.difficulty ?? undefined,
+            successEffect: link.abilities.success_effect ?? undefined,
+            partialEffect: link.abilities.partial_effect ?? undefined,
+            failureEffect: link.abilities.failure_effect ?? undefined,
           },
         ]
       : link.state === "masked"
@@ -292,6 +306,13 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
               costs: {},
               limit: undefined,
               recommendedNex: 0,
+              useCriteria: undefined,
+              application: undefined,
+              testFormula: undefined,
+              difficulty: undefined,
+              successEffect: undefined,
+              partialEffect: undefined,
+              failureEffect: undefined,
             },
           ]
         : [],
@@ -301,30 +322,36 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
 export async function getCharacterInventory(characterId: string) {
   if (!isSupabaseConfigured) {
     return [
-      { id: "lanterna", name: "Lanterna tática", detail: "3 cargas", state: "equipado" },
-      { id: "kit", name: "Kit de primeiros socorros", detail: "1 uso", state: "íntegro" },
-      { id: "lente", name: "Lente rachada", detail: "informação oculta", state: "corrompido" },
+      { id: "lanterna", itemId: "lanterna", name: "Lanterna tática", description: "Iluminação portátil.", detail: "3 cargas", quantity: 1, charges: 3, ammunition: null, state: "equipado" },
+      { id: "kit", itemId: "kit", name: "Kit de primeiros socorros", description: "Material médico.", detail: "1 uso", quantity: 1, charges: 1, ammunition: null, state: "íntegro" },
+      { id: "lente", itemId: "lente", name: "Lente rachada", description: "Informação ainda protegida.", detail: "informação oculta", quantity: 1, charges: null, ammunition: null, state: "corrompido" },
     ];
   }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("character_items")
-    .select("id,quantity,charges,ammunition,state,items(name)")
+    .select("id,item_id,quantity,charges,ammunition,state,items(name,description)")
     .eq("character_id", characterId);
   if (error) throw new Error(`Falha ao carregar inventário: ${error.message}`);
   return (
     data as unknown as Array<{
       id: string;
+      item_id: string;
       quantity: number;
       charges: number | null;
       ammunition: number | null;
       state: string | null;
-      items: { name: string } | null;
+      items: { name: string; description: string | null } | null;
     }>
   ).map((item) => ({
     id: item.id,
+    itemId: item.item_id,
     name: item.items?.name ?? "Item",
+    description: item.items?.description ?? "",
     detail: item.charges !== null ? `${item.charges} cargas` : `${item.quantity} unidade(s)`,
+    quantity: item.quantity,
+    charges: item.charges,
+    ammunition: item.ammunition,
     state: item.state ?? "íntegro",
   }));
 }
@@ -425,9 +452,12 @@ export async function getAuthorizedNotifications(): Promise<PlayerNotification[]
       },
     ];
   const supabase = await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData.user) return [];
   const { data, error } = await supabase
     .from("notifications")
     .select("id,type,title,safe_preview,read_at,acknowledged_at,created_at")
+    .eq("user_id", authData.user.id)
     .order("created_at", { ascending: false })
     .limit(30);
   if (error) throw new Error(`Falha ao carregar notificações: ${error.message}`);
@@ -924,4 +954,58 @@ export async function getSessionCharacterDetails(
       return { characterId, inventory, abilities, skills, actions, weaknesses };
     }),
   );
+}
+
+export type AbilityUseRequest = {
+  id: string;
+  characterId: string;
+  characterName: string;
+  characterAbilityId: string;
+  abilityName: string;
+  status: string;
+  decision: string | null;
+  context: string;
+  rolled: boolean;
+  createdAt: string;
+};
+
+export async function getSessionAbilityRequests(sessionId: string): Promise<AbilityUseRequest[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("roll_requests")
+    .select("id,character_id,character_ability_id,status,decision,context,rolled_at,created_at,characters(name),character_abilities(abilities(name))")
+    .eq("session_id", sessionId)
+    .not("character_ability_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(`Falha ao carregar solicitações: ${error.message}`);
+  return (data as unknown as Array<{
+    id: string; character_id: string; character_ability_id: string; status: string; decision: string | null;
+    context: string; rolled_at: string | null; created_at: string;
+    characters: { name: string } | null; character_abilities: { abilities: { name: string } | null } | null;
+  }>).map((item) => ({
+    id: item.id, characterId: item.character_id, characterName: item.characters?.name ?? "Personagem",
+    characterAbilityId: item.character_ability_id, abilityName: item.character_abilities?.abilities?.name ?? "Habilidade",
+    status: item.status, decision: item.decision, context: item.context, rolled: Boolean(item.rolled_at), createdAt: item.created_at,
+  }));
+}
+
+export type PublicDiceRoll = {
+  id: string; characterId: string | null; characterName: string; purpose: string; formula: string;
+  rolls: number[]; total: number; createdAt: string;
+};
+
+export async function getSessionDiceRolls(sessionId: string): Promise<PublicDiceRoll[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("dice_rolls")
+    .select("id,character_id,formula,rolls,total,purpose,created_at,characters(name)")
+    .eq("session_id", sessionId).eq("visibility", "session")
+    .order("created_at", { ascending: false }).limit(20);
+  if (error) throw new Error(`Falha ao carregar rolagens: ${error.message}`);
+  return (data as unknown as Array<{ id: string; character_id: string | null; formula: string; rolls: number[]; total: number; purpose: string; created_at: string; characters: { name: string } | null }>).map((item) => ({
+    id: item.id, characterId: item.character_id, characterName: item.characters?.name ?? "Jogador",
+    purpose: item.purpose, formula: item.formula, rolls: item.rolls, total: item.total, createdAt: item.created_at,
+  }));
 }

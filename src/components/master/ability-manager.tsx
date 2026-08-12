@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { KeyRound, Plus, Sparkles } from "lucide-react";
 import type { AbilityState, AbilitySummary } from "@/types/domain";
+import { AbilityDetails } from "@/components/character/ability-details";
+import { AbilityMetadataEditor } from "@/components/master/ability-metadata-editor";
 
 const estados: Array<{ valor: AbilityState; rotulo: string }> = [
   { valor: "sealed", rotulo: "Selada" },
@@ -37,6 +39,13 @@ export function AbilityManager({
   const [nex, setNex] = useState(10);
   const [pe, setPe] = useState("");
   const [san, setSan] = useState("");
+  const [criterio, setCriterio] = useState("");
+  const [aplicacao, setAplicacao] = useState("");
+  const [teste, setTeste] = useState("1d20");
+  const [dificuldade, setDificuldade] = useState(10);
+  const [sucesso, setSucesso] = useState("");
+  const [parcial, setParcial] = useState("");
+  const [falha, setFalha] = useState("");
 
   async function criar(event: React.FormEvent) {
     event.preventDefault();
@@ -54,6 +63,13 @@ export function AbilityManager({
         costs: { pe, san },
         recommendedNex: nex,
         initialState: estado,
+        useCriteria: criterio,
+        application: aplicacao,
+        testFormula: teste,
+        difficulty: dificuldade,
+        successEffect: sucesso,
+        partialEffect: parcial,
+        failureEffect: falha,
       }),
     });
     const result = (await response.json()) as {
@@ -74,10 +90,18 @@ export function AbilityManager({
         costs: { ...(pe ? { pe } : {}), ...(san ? { san } : {}) },
         recommendedNex: nex,
         state: estado,
+        useCriteria: criterio,
+        application: aplicacao,
+        testFormula: teste,
+        difficulty: dificuldade,
+        successEffect: sucesso,
+        partialEffect: parcial,
+        failureEffect: falha,
       },
     ]);
     setNome("");
     setDescricao("");
+    setCriterio(""); setAplicacao(""); setTeste("1d20"); setDificuldade(10); setSucesso(""); setParcial(""); setFalha("");
     setAviso("Habilidade adicionada à ficha. O mestre controla quando ela será revelada.");
   }
 
@@ -134,6 +158,8 @@ export function AbilityManager({
                 <KeyRound size={11} /> {nomeEstado(habilidade.state)}
               </span>
             </div>
+            <AbilityDetails ability={habilidade} />
+            <AbilityMetadataEditor campaignId={campaignId} ability={habilidade} onSaved={(updated) => setHabilidades((items) => items.map((item) => item.id === updated.id ? updated : item))} />
             <div className="mt-3 rounded border border-[#30333a] bg-black/25 p-3">
               <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
                 Informações da habilidade
@@ -193,6 +219,13 @@ export function AbilityManager({
               onChange={(event) => setDescricao(event.target.value)}
             />
           </label>
+          <label className="text-xs font-bold md:col-span-2">Critério de uso<textarea required className="field mt-1 min-h-20" value={criterio} onChange={(event) => setCriterio(event.target.value)} placeholder="Quando e sob quais condições pode ser solicitada" /></label>
+          <label className="text-xs font-bold md:col-span-2">Como pode ser aplicada<textarea required className="field mt-1 min-h-20" value={aplicacao} onChange={(event) => setAplicacao(event.target.value)} placeholder="Alvo, alcance, duração e forma de aplicação" /></label>
+          <label className="text-xs font-bold">Teste<input required className="field mt-1 font-mono" value={teste} onChange={(event) => setTeste(event.target.value)} placeholder="Ex.: 1d20+5" /></label>
+          <label className="text-xs font-bold">Dificuldade (DT)<input className="field mt-1" type="number" min={0} max={999} value={dificuldade} onChange={(event) => setDificuldade(Number(event.target.value))} /></label>
+          <label className="text-xs font-bold md:col-span-2">Efeito no sucesso<textarea required className="field mt-1 min-h-20" value={sucesso} onChange={(event) => setSucesso(event.target.value)} /></label>
+          <label className="text-xs font-bold">Efeito parcial<textarea className="field mt-1 min-h-20" value={parcial} onChange={(event) => setParcial(event.target.value)} /></label>
+          <label className="text-xs font-bold">Efeito na falha<textarea required className="field mt-1 min-h-20" value={falha} onChange={(event) => setFalha(event.target.value)} /></label>
           <label className="text-xs font-bold">
             Estado inicial
             <select

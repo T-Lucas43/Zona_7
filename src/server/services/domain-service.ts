@@ -208,6 +208,13 @@ export async function createCharacterAbility(input: {
   initialState: "sealed" | "masked" | "discovered" | "unlocked" | "altered" | "disabled" | "lost";
   actorUserId: string;
   idempotencyKey: string;
+  useCriteria?: string;
+  application?: string;
+  testFormula?: string;
+  difficulty?: number;
+  successEffect?: string;
+  partialEffect?: string;
+  failureEffect?: string;
 }) {
   const supabase = await clientOrDemo();
   if (!supabase) return demoResult("ability_created");
@@ -224,6 +231,24 @@ export async function createCharacterAbility(input: {
     p_idempotency_key: input.idempotencyKey,
   });
   if (error) throw new Error(error.message);
+  const result = data as { abilityId?: string };
+  if (result.abilityId) {
+    const { error: metadataError } = await supabase
+      .from("abilities")
+      .update({
+        use_criteria: input.useCriteria?.trim() || null,
+        application_text: input.application?.trim() || null,
+        test_formula: input.testFormula?.trim() || null,
+        difficulty: input.difficulty ?? null,
+        success_effect: input.successEffect?.trim() || null,
+        partial_effect: input.partialEffect?.trim() || null,
+        failure_effect: input.failureEffect?.trim() || null,
+        updated_by: input.actorUserId,
+      })
+      .eq("id", result.abilityId)
+      .eq("campaign_id", input.campaignId);
+    if (metadataError) throw new Error(metadataError.message);
+  }
   return data;
 }
 
@@ -343,12 +368,33 @@ export async function controlSessionRuntime(input: {
 }) {
   const supabase = await clientOrDemo();
   if (!supabase) return { ...demoResult(`session_${input.action}`), status: input.action };
-  const { data, error } = await supabase.rpc("control_session_runtime", {
+  const { data, error } = await supabase.rpc("control_session_runtime_v2", {
     p_campaign_id: input.campaignId,
     p_session_id: input.sessionId,
     p_actor_user_id: input.actorUserId,
     p_action: input.action,
     p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function mutateInventoryItem(input: {
+  characterItemId: string;
+  action: "use" | "discard" | "donate";
+  targetCharacterId?: string;
+  quantity: number;
+  actorUserId: string;
+}) {
+  const supabase = await clientOrDemo();
+  if (!supabase) return demoResult(`inventory_${input.action}`);
+  const { data, error } = await supabase.rpc("mutate_owned_inventory_item", {
+    p_character_item_id: input.characterItemId,
+    p_action: input.action,
+    p_target_character_id: input.targetCharacterId ?? null,
+    p_quantity: input.quantity,
+    p_actor_user_id: input.actorUserId,
+    p_idempotency_key: crypto.randomUUID(),
   });
   if (error) throw new Error(error.message);
   return data;

@@ -5,7 +5,7 @@ import { Dices, LoaderCircle } from "lucide-react";
 
 type Result = { total: number; rolls: number[]; normalized: string; keptIndexes: number[] };
 
-export function DiceRoller({ compact = false }: { compact?: boolean }) {
+export function DiceRoller({ compact = false, characterId, sessionId, disabledReason }: { compact?: boolean; characterId?: string; sessionId?: string; disabledReason?: string }) {
   const [formula, setFormula] = useState("1d20+5");
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -18,7 +18,7 @@ export function DiceRoller({ compact = false }: { compact?: boolean }) {
       const response = await fetch("/api/dice/roll", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ formula, purpose: "Rolagem livre", visibility: "session" }),
+        body: JSON.stringify({ formula, purpose: "Rolagem livre", visibility: "session", characterId, sessionId }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Falha na rolagem.");
@@ -54,11 +54,12 @@ export function DiceRoller({ compact = false }: { compact?: boolean }) {
           type="button"
           className="btn btn-primary shrink-0"
           onClick={roll}
-          disabled={pending}
+          disabled={pending || Boolean(disabledReason)}
         >
           {pending ? <LoaderCircle className="animate-spin" size={17} /> : "Rolar"}
         </button>
       </div>
+      {disabledReason && <p className="mt-3 rounded border border-[#6b3038] bg-[#711924]/15 p-3 text-xs text-[#f0a5ad]">{disabledReason}</p>}
       {error && (
         <p role="alert" className="mt-3 text-xs text-[#f07580]">
           {error}

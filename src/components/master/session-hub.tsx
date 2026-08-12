@@ -6,21 +6,24 @@ import { ArrowRight, Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare,
 import { LiveSync } from "@/components/live-sync";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
+import { AbilityDetails } from "@/components/character/ability-details";
+import { CharacterLiveControls } from "@/components/master/character-live-controls";
 import { MapStudio } from "@/components/master/map-studio";
 import { SessionControls } from "@/components/master/session-controls";
 import { SessionClock } from "@/components/master/session-clock";
 import { SessionScriptControl } from "@/components/master/session-script-control";
+import { SessionOperations } from "@/components/master/session-operations";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
-import type { AtorDaCampanha, CenaDaCampanha, ContaDaCampanha, EncontroDaCampanha, Remetente, RoteiroDaCampanha } from "@/server/repositories/master-repository";
+import type { AtorDaCampanha, CenaDaCampanha, ContaDaCampanha, EncontroDaCampanha, ItemDaCampanha, PistaDaCampanha, Remetente, RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionPublicState } from "@/server/repositories/session-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
-import type { SessionCharacterDetails } from "@/server/repositories/character-repository";
+import type { AbilityUseRequest, SessionCharacterDetails } from "@/server/repositories/character-repository";
 
 const resourceLabels: Record<ResourceKind, string> = { pv: "PV", pe: "PE", san: "SAN" };
 
 export function SessionHub({
-  campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, encounters, actors, visibleCharacterIds,
+  campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, encounters, actors, items, handouts, initialAbilityRequests, initialSceneSyncEnabled, visibleCharacterIds,
 }: {
   campaignId: string;
   session: SessionSummary;
@@ -34,6 +37,10 @@ export function SessionHub({
   initialScriptRun: SessionScriptRun | null;
   encounters: EncontroDaCampanha[];
   actors: AtorDaCampanha[];
+  items: ItemDaCampanha[];
+  handouts: PistaDaCampanha[];
+  initialAbilityRequests: AbilityUseRequest[];
+  initialSceneSyncEnabled: boolean;
   visibleCharacterIds: string[];
 }) {
   const [characters, setCharacters] = useState(initialCharacters);
@@ -48,12 +55,14 @@ export function SessionHub({
   const [deliveryTarget, setDeliveryTarget] = useState<"selected" | "all">("selected");
   const [deliveryName, setDeliveryName] = useState("");
   const [deliveryDetails, setDeliveryDetails] = useState("");
+  const [deliveryCatalogId, setDeliveryCatalogId] = useState("new");
   const [messageTarget, setMessageTarget] = useState<"selected" | "all">("selected");
   const [messageSender, setMessageSender] = useState(senders[0]?.nome ?? "Mestre");
   const [messageBody, setMessageBody] = useState("");
   const [messageReview, setMessageReview] = useState(false);
   const [publicState, setPublicState] = useState(initialPublicState);
   const [sheetTab, setSheetTab] = useState<"summary" | "inventory" | "abilities" | "rules">("summary");
+  const [sceneSyncEnabled, setSceneSyncEnabled] = useState(initialSceneSyncEnabled);
   const selected = useMemo(() => characters.find((item) => item.id === selectedId) ?? characters[0], [characters, selectedId]);
   const selectedDetails = details.find((item) => item.characterId === selected?.id);
   const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
@@ -141,6 +150,26 @@ export function SessionHub({
     setNotice(response.ok ? "Cena pública atualizada para todos os jogadores." : result.error ?? "Falha ao publicar cena.");
   }
 
+  async function toggleSceneSync() {
+    const enabled = !sceneSyncEnabled;
+    const response = await fetch("/api/master/session/scene-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId, sessionId: session.id, sceneId: scene.id, enabled }) });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setNotice(result.error ?? "Falha ao sincronizar cena.");
+    setSceneSyncEnabled(enabled); setNotice(enabled ? "Cena sincronizada. Mapa, entidades e movimentos estão ao vivo para os jogadores." : "Cena dessincronizada. Os jogadores veem o aviso enquanto você prepara o cenário.");
+  }
+
+  function chooseDelivery(id: string) {
+    setDeliveryCatalogId(id);
+    if (id === "new") { setDeliveryName(""); setDeliveryDetails(""); return; }
+    if (deliveryKind === "item") {
+      const item = items.find((value) => value.id === id);
+      if (item) { setDeliveryName(item.nome); setDeliveryDetails(item.descricao); }
+    } else {
+      const handout = handouts.find((value) => value.id === id);
+      if (handout) { setDeliveryName(handout.titulo); setDeliveryDetails(handout.conteudo || handout.resumo); }
+    }
+  }
+
   return (
     <div id="controle-sessao">
       <LiveSync campaignId={campaignId} />
@@ -149,6 +178,7 @@ export function SessionHub({
         <div className="flex flex-wrap gap-2">
           <Link className="btn" href={`/master/campaigns/${campaignId}/encounters`}><Swords size={15} /> Encontros</Link>
           <Link className="btn" href={`/master/campaigns/${campaignId}/actors`}><Sparkles size={15} /> Entidades e NPCs</Link>
+          <Link className="btn" href={`/master/campaigns/${campaignId}/items`}><Package size={15} /> Itens da sessão</Link>
           <span className="tag"><Radio size={12} /> {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}</span>
         </div>
       </div>
@@ -185,9 +215,11 @@ export function SessionHub({
           </div>
         </Link>
       </section>
+      <SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} />
       <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-4">
-          <SessionScriptControl campaignId={campaignId} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} />
+          <SessionScriptControl campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} />
+          <div className="flex justify-end"><button className={`btn ${sceneSyncEnabled ? "border-[#315b45] text-[#7bd5a5]" : "border-[#6d5527] text-[#e8c16d]"}`} type="button" onClick={() => void toggleSceneSync()}>{sceneSyncEnabled ? <EyeOff size={14} /> : <Eye size={14} />}{sceneSyncEnabled ? "Dessincronizar cena" : "Sincronizar cena para jogadores"}</button></div>
           <MapStudio
             campaignId={campaignId}
             initialScene={scene}
@@ -227,6 +259,7 @@ export function SessionHub({
             <div className="mt-3 grid grid-cols-[1fr_0.65fr] gap-2"><select className="field" value={resource} onChange={(event) => setResource(event.target.value as ResourceKind)}><option value="pv">PV</option><option value="pe">PE</option><option value="san">SAN</option></select><input className="field" type="number" min="1" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div>
             <input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da alteração" />
             <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn border-[#6e252e] text-[#f0949d]" type="button" onClick={() => void mutateResource(-1)}>Aplicar dano/perda</button><button className="btn border-[#2f6147] text-[#7bd5a5]" type="button" onClick={() => void mutateResource(1)}>Curar/recuperar</button></div>
+            <CharacterLiveControls campaignId={campaignId} character={selected} onChange={(updated) => setCharacters((items) => items.map((item) => item.id === updated.id ? updated : item))} />
           </section>}
           {selected && selectedDetails && (
             <section className="panel session-sheet rounded-lg p-5">
@@ -258,6 +291,7 @@ export function SessionHub({
                 {selectedDetails.abilities.map((ability) => <article className="rounded border border-[#30333a] p-3" key={ability.id}>
                   <div className="flex justify-between gap-2"><strong className="text-sm">{ability.name}</strong><span className="tag">{ability.state}</span></div>
                   <p className="mt-2 text-xs leading-5 text-[#9a9da3]">{ability.description}</p>
+                  <AbilityDetails ability={ability} />
                   <button className={`btn mt-2 w-full px-2 ${ability.state === "unlocked" ? "" : "btn-primary"}`} type="button" onClick={() => void changeAbilityState(ability.id, ability.state === "unlocked" ? "sealed" : "unlocked")}>
                     {ability.state === "unlocked" ? <ShieldAlert size={14} /> : <Sparkles size={14} />}
                     {ability.state === "unlocked" ? "Selar habilidade" : "Liberar agora"}
@@ -274,7 +308,8 @@ export function SessionHub({
           )}
           <form className="panel rounded-lg p-5" onSubmit={deliver}>
             <div className="flex items-center gap-2">{deliveryKind === "item" ? <Package size={17} /> : <ScrollText size={17} />}<h2 className="font-extrabold">Entregar item ou pista</h2></div>
-            <div className="mt-3 grid grid-cols-2 gap-2"><select className="field" value={deliveryKind} onChange={(event) => setDeliveryKind(event.target.value as "item" | "handout")}><option value="item">Item</option><option value="handout">Pista</option></select><select className="field" value={deliveryTarget} onChange={(event) => setDeliveryTarget(event.target.value as "selected" | "all")}><option value="selected">Somente {selected?.name}</option><option value="all">Todos os jogadores</option></select></div>
+            <div className="mt-3 grid grid-cols-2 gap-2"><select className="field" value={deliveryKind} onChange={(event) => { setDeliveryKind(event.target.value as "item" | "handout"); setDeliveryCatalogId("new"); setDeliveryName(""); setDeliveryDetails(""); }}><option value="item">Item</option><option value="handout">Pista</option></select><select className="field" value={deliveryTarget} onChange={(event) => setDeliveryTarget(event.target.value as "selected" | "all")}><option value="selected">Somente {selected?.name}</option><option value="all">Todos os jogadores</option></select></div>
+            <select className="field mt-2" value={deliveryCatalogId} onChange={(event) => chooseDelivery(event.target.value)}><option value="new">Criar novo conteúdo</option>{(deliveryKind === "item" ? items.map((item) => ({ id: item.id, label: item.nome })) : handouts.map((item) => ({ id: item.id, label: item.titulo }))).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select>
             <input required className="field mt-2" placeholder={deliveryKind === "item" ? "Nome do item" : "Título da pista"} value={deliveryName} onChange={(event) => setDeliveryName(event.target.value)} />
             <textarea className="field mt-2 min-h-20" placeholder="Descrição ou conteúdo" value={deliveryDetails} onChange={(event) => setDeliveryDetails(event.target.value)} />
             <button className="btn btn-primary mt-2"><Send size={14} /> Entregar e notificar</button>

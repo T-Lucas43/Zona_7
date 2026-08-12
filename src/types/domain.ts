@@ -65,6 +65,13 @@ export interface AbilitySummary {
   costs: Partial<Record<ResourceKind, string>>;
   limit?: string;
   recommendedNex: number;
+  useCriteria?: string;
+  application?: string;
+  testFormula?: string;
+  difficulty?: number;
+  successEffect?: string;
+  partialEffect?: string;
+  failureEffect?: string;
 }
 
 export interface SessionSummary {

@@ -1,5 +1,8 @@
 import { Archive, CheckCircle2, EyeOff, LockKeyhole, MessageSquare, Package, Sparkles } from "lucide-react";
-import { AbilityUseButton } from "@/components/character/ability-use-button";
+import { AbilityDetails } from "@/components/character/ability-details";
+import { AbilityRequestButton } from "@/components/player/ability-request-button";
+import { InventoryActions } from "@/components/player/inventory-actions";
+import { NotificationCenter } from "@/components/player/notification-center";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
 import {
   getAuthorizedCharacter,
@@ -10,7 +13,10 @@ import {
   getCharacterInventory,
   getCharacterSkills,
   getCharacterWeaknesses,
+  getAuthorizedNotifications,
+  getSessionAbilityRequests,
 } from "@/server/repositories/character-repository";
+import { getCurrentSession, getSessionCast } from "@/server/repositories/session-repository";
 
 export default async function CharacterSectionPage({
   params,
@@ -38,6 +44,13 @@ export default async function CharacterSectionPage({
       </section>
     );
   }
+  const session = character.campaignId ? await getCurrentSession(character.campaignId) : null;
+  const [cast, notifications, abilityRequests] = await Promise.all([
+    section === "inventory" && session ? getSessionCast(character.campaignId) : Promise.resolve([]),
+    section === "messages" ? getAuthorizedNotifications() : Promise.resolve([]),
+    section === "abilities" && session ? getSessionAbilityRequests(session.id) : Promise.resolve([]),
+  ]);
+  const donationTargets = cast.flatMap((member) => member.characterId && member.characterId !== character.id ? [{ id: member.characterId, name: member.name }] : []);
   const [abilities, inventory, messages, handouts, skills, actions, weaknesses] = await Promise.all(
     [
       section === "abilities" ? getCharacterAbilities(character.id) : Promise.resolve([]),
@@ -83,6 +96,7 @@ export default async function CharacterSectionPage({
                     <Sparkles size={16} className="text-[#d84c58]" />
                   )}
                 </div>
+                <AbilityDetails ability={ability} />
                 <h2 className="mt-4 text-lg font-extrabold">
                   {ability.state === "sealed" ? "█ ████ ███████" : ability.name}
                 </h2>
@@ -104,9 +118,7 @@ export default async function CharacterSectionPage({
                   ))}
                   {ability.limit && <span className="tag">{ability.limit}</span>}
                 </div>
-                {ability.state === "unlocked" && (
-                  <AbilityUseButton abilityId={ability.id} costs={ability.costs} />
-                )}
+                {ability.state === "unlocked" && session && !["dying", "dead"].includes(character.characterState ?? "") && <AbilityRequestButton campaignId={character.campaignId!} sessionId={session.id} characterId={character.id} abilityId={ability.id} pendingRequest={(() => { const request = abilityRequests.find((item) => item.characterAbilityId === ability.id); return request ? { id: request.id, decision: request.decision, rolled: request.rolled } : undefined; })()} />}
               </article>
             ))}
           </div>
@@ -177,12 +189,14 @@ export default async function CharacterSectionPage({
       )}
       {section === "inventory" && (
         <div className="mt-6 space-y-3">
-          {inventory.map(({ id, name, detail, state }) => (
+          {inventory.map(({ id, name, detail, description, state }) => (
             <article className="panel flex items-center gap-4 rounded-lg p-4" key={id}>
               <Package className="text-[#c84854]" />
               <div className="flex-1">
                 <h2 className="font-extrabold">{name}</h2>
                 <p className="mt-1 text-xs text-[#83868e]">{detail}</p>
+                {description && <p className="mt-2 text-xs text-[#a5a7ad]">{description}</p>}
+                {!["dying", "dead"].includes(character.characterState ?? "") && <InventoryActions characterItemId={id} targets={donationTargets} />}
               </div>
               <span className="tag">{state}</span>
             </article>
@@ -191,6 +205,7 @@ export default async function CharacterSectionPage({
       )}
       {section === "messages" && (
         <div className="mt-6 space-y-3">
+          <NotificationCenter initial={notifications} authorizedCharacterIds={[character.id]} />
           {messages.map((message) => (
             <article className="panel rounded-lg p-5" key={message.id}>
               <div className="flex items-center gap-2 text-xs font-bold text-[#dd5965]">

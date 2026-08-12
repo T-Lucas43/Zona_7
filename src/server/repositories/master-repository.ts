@@ -93,6 +93,16 @@ export type AtorDaCampanha = {
   visibilidade: string;
   portraitUrl?: string;
   naCena: boolean;
+  tokenId?: string;
+  tokenVisivel?: boolean;
+};
+
+export type ItemDaCampanha = {
+  id: string;
+  nome: string;
+  descricao: string;
+  categoria: string;
+  visibilidade: string;
 };
 
 export type CenaDaCampanha = {
@@ -107,6 +117,7 @@ export type CenaDaCampanha = {
     atorId: string;
     characterId?: string;
     actorType?: string;
+    characterState?: string;
     portraitUrl?: string;
     nome: string;
     cor: string;
@@ -166,6 +177,11 @@ export type PistaDaCampanha = {
   visibilidade: string;
   resumo: string;
   conteudo: string;
+};
+
+export type SessionSceneState = {
+  enabled: boolean;
+  sceneId: string | null;
 };
 
 export type EventoAuditoria = {
@@ -360,6 +376,37 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
     resumo: handout.public_excerpt ?? "",
     conteudo: handout.handout_contents?.protected_text ?? "",
   }));
+}
+
+export async function getItensDaCampanha(campaignId: string): Promise<ItemDaCampanha[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("items")
+    .select("id,name,description,category,visibility")
+    .eq("campaign_id", campaignId)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`Falha ao carregar itens: ${error.message}`);
+  return data.map((item) => ({
+    id: item.id,
+    nome: item.name,
+    descricao: item.description ?? "",
+    categoria: item.category ?? "Item de sessão",
+    visibilidade: visibilityLabels[item.visibility] ?? item.visibility,
+  }));
+}
+
+export async function getSessionSceneState(sessionId: string): Promise<SessionSceneState> {
+  if (!isSupabaseConfigured) return { enabled: true, sceneId: null };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("live_sessions")
+    .select("scene_sync_enabled,current_scene_id")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao carregar sincronização da cena: ${error.message}`);
+  return { enabled: data?.scene_sync_enabled ?? true, sceneId: data?.current_scene_id ?? null };
 }
 
 export async function getEventosAuditoria(campaignId: string): Promise<EventoAuditoria[]> {
@@ -684,7 +731,7 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("actors")
-    .select("id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id)")
+    .select("id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id)")
     .eq("campaign_id", campaignId)
     .neq("actor_type", "player_character")
     .is("deleted_at", null)
@@ -704,11 +751,13 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
       visibilidade: visibilityLabels[ator.visibility] ?? ator.visibility,
       portraitUrl: portrait?.data?.signedUrl,
       naCena: ator.scene_tokens.length > 0,
+      tokenId: ator.scene_tokens[0]?.id,
+      tokenVisivel: ator.scene_tokens[0]?.visible,
     };
   }));
 }
 
-export async function getCenaPrincipal(campaignId: string): Promise<CenaDaCampanha> {
+export async function getCenaPrincipal(campaignId: string, sceneId?: string | null): Promise<CenaDaCampanha> {
   const demonstracao: CenaDaCampanha = {
     id: "73000000-0000-4000-8000-000000000001",
     nome: "Estúdio dos Sete Segundos",
@@ -729,16 +778,15 @@ export async function getCenaPrincipal(campaignId: string): Promise<CenaDaCampan
   };
   if (!isSupabaseConfigured) return demonstracao;
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("game_scenes")
     .select(
-      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,label,x,y,visible,actors(color,character_id,actor_type,public_portrait_path))",
+      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,label,x,y,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)))",
     )
     .eq("campaign_id", campaignId)
-    .is("deleted_at", null)
-    .order("created_at")
-    .limit(1)
-    .single();
+    .is("deleted_at", null);
+  query = sceneId ? query.eq("id", sceneId) : query.order("created_at").limit(1);
+  const { data, error } = await query.single();
   if (error) throw new Error(`Falha ao carregar cena: ${error.message}`);
   const media = data.media_assets as unknown as {
     storage_bucket: string;
@@ -761,6 +809,7 @@ export async function getCenaPrincipal(campaignId: string): Promise<CenaDaCampan
           character_id: string | null;
           actor_type: string;
           public_portrait_path: string | null;
+          characters: { character_state: string | null } | null;
         } | null;
       }>
     ).map(async (token) => {
@@ -772,6 +821,7 @@ export async function getCenaPrincipal(campaignId: string): Promise<CenaDaCampan
         atorId: token.actor_id,
         characterId: token.actors?.character_id ?? undefined,
         actorType: token.actors?.actor_type,
+        characterState: token.actors?.characters?.character_state ?? undefined,
         portraitUrl: portrait?.data?.signedUrl,
         nome: token.label,
         cor: token.actors?.color ?? "#ffffff",
