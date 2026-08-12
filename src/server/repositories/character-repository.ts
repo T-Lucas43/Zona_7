@@ -172,6 +172,8 @@ export async function getSessionCharacters(campaignId: string, sessionId: string
     .select("character_id")
     .eq("campaign_id", campaignId)
     .eq("session_id", sessionId)
+    .eq("status", "online")
+    .gte("last_seen_at", new Date(Date.now() - 60_000).toISOString())
     .not("character_id", "is", null);
   if (participantError)
     throw new Error(`Falha ao carregar participantes da sessão: ${participantError.message}`);

@@ -112,6 +112,7 @@ export type CenaDaCampanha = {
   estado: string;
   modoGrade: string;
   backgroundUrl?: string;
+  backgroundKey?: string;
   tokens: Array<{
     id: string;
     atorId: string;
@@ -123,8 +124,10 @@ export type CenaDaCampanha = {
     cor: string;
     x: number;
     y: number;
+    zIndex: number;
     visivel: boolean;
   }>;
+  connections: Array<{ id: string; fromTokenId: string; toTokenId: string }>;
 };
 
 export type RoteiroDaCampanha = {
@@ -177,6 +180,19 @@ export type PistaDaCampanha = {
   visibilidade: string;
   resumo: string;
   conteudo: string;
+  board?: {
+    x: number;
+    y: number;
+    rotation: number;
+    zIndex: number;
+    style: "polaroid" | "postit" | "paper";
+  };
+};
+
+export type ConexaoDoMural = {
+  id: string;
+  fromHandoutId: string;
+  toHandoutId: string;
 };
 
 export type SessionSceneState = {
@@ -354,7 +370,7 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("handouts")
-    .select("id,title,type,state,visibility,public_excerpt,handout_contents(protected_text)")
+    .select("id,title,type,state,visibility,public_excerpt,handout_contents(protected_text),investigation_board_items(x,y,rotation,z_index,display_style)")
     .eq("campaign_id", campaignId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
@@ -367,6 +383,7 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
     visibility: string;
     public_excerpt: string | null;
     handout_contents: { protected_text: string | null } | null;
+    investigation_board_items: Array<{ x: number; y: number; rotation: number; z_index: number; display_style: "polaroid" | "postit" | "paper" }> | { x: number; y: number; rotation: number; z_index: number; display_style: "polaroid" | "postit" | "paper" } | null;
   }>).map((handout) => ({
     id: handout.id,
     titulo: handout.title,
@@ -375,7 +392,23 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
     visibilidade: visibilityLabels[handout.visibility] ?? handout.visibility,
     resumo: handout.public_excerpt ?? "",
     conteudo: handout.handout_contents?.protected_text ?? "",
+    board: (() => {
+      const value = Array.isArray(handout.investigation_board_items) ? handout.investigation_board_items[0] : handout.investigation_board_items;
+      return value ? { x: Number(value.x), y: Number(value.y), rotation: Number(value.rotation), zIndex: value.z_index, style: value.display_style } : undefined;
+    })(),
   }));
+}
+
+export async function getConexoesDoMural(campaignId: string): Promise<ConexaoDoMural[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("investigation_board_connections")
+    .select("id,from_handout_id,to_handout_id")
+    .eq("campaign_id", campaignId)
+    .order("created_at");
+  if (error) throw new Error(`Falha ao carregar conexões do mural: ${error.message}`);
+  return data.map((item) => ({ id: item.id, fromHandoutId: item.from_handout_id, toHandoutId: item.to_handout_id }));
 }
 
 export async function getItensDaCampanha(campaignId: string): Promise<ItemDaCampanha[]> {
@@ -773,15 +806,17 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
       cor: ["#b8323c", "#e2b341", "#8f74c8", "#57a773", "#3c8dff", "#7f1d2d"][indice] ?? "#fff",
       x: [0.18, 0.34, 0.48, 0.61, 0.78, 0.86][indice] ?? 0.5,
       y: [0.35, 0.62, 0.28, 0.58, 0.38, 0.7][indice] ?? 0.5,
+      zIndex: indice + 1,
       visivel: true,
     })),
+    connections: [],
   };
   if (!isSupabaseConfigured) return demonstracao;
   const supabase = await createClient();
   let query = supabase
     .from("game_scenes")
     .select(
-      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,label,x,y,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)))",
+      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,label,x,y,z_index,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)))",
     )
     .eq("campaign_id", campaignId)
     .is("deleted_at", null);
@@ -795,6 +830,12 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
   const signed = media
     ? await supabase.storage.from(media.storage_bucket).createSignedUrl(media.storage_path, 3600)
     : null;
+  const { data: connectionRows, error: connectionError } = await supabase
+    .from("scene_token_connections")
+    .select("id,from_token_id,to_token_id")
+    .eq("scene_id", data.id)
+    .order("created_at");
+  if (connectionError) throw new Error(`Falha ao carregar conexões do mapa: ${connectionError.message}`);
   const tokens = await Promise.all(
     (
       data.scene_tokens as unknown as Array<{
@@ -803,6 +844,7 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
         label: string;
         x: number;
         y: number;
+        z_index: number;
         visible: boolean;
         actors: {
           color: string;
@@ -827,6 +869,7 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
         cor: token.actors?.color ?? "#ffffff",
         x: Number(token.x),
         y: Number(token.y),
+        zIndex: token.z_index,
         visivel: token.visible,
       };
     }),
@@ -838,7 +881,9 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
     estado: data.state,
     modoGrade: gridTypeLabels[String(data.grid_type)] ?? String(data.grid_type),
     backgroundUrl: signed?.data?.signedUrl,
+    backgroundKey: media ? `${media.storage_bucket}/${media.storage_path}` : undefined,
     tokens,
+    connections: connectionRows.map((item) => ({ id: item.id, fromTokenId: item.from_token_id, toTokenId: item.to_token_id })),
   };
 }
 

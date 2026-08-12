@@ -1,6 +1,7 @@
 import { CheckCircle2, Shield } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CharacterCard } from "@/components/character/character-card";
+import { LiveSync } from "@/components/live-sync";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
 import { CharacterSheetOverview } from "@/components/character/character-sheet-overview";
@@ -16,6 +17,7 @@ import { CharacterCreator } from "@/components/master/character-creator";
 import { CreateSessionForm } from "@/components/master/create-session-form";
 import { EncounterManager } from "@/components/master/encounter-manager";
 import { HandoutManager } from "@/components/master/handout-manager";
+import { InvestigationBoard } from "@/components/master/investigation-board";
 import { MapStudio } from "@/components/master/map-studio";
 import { MessagingStudio } from "@/components/master/messaging-studio";
 import { MeterControl } from "@/components/master/meter-control";
@@ -44,6 +46,7 @@ import {
   getNomeCampanha,
   getPersonalizacao,
   getPistas,
+  getConexoesDoMural,
   getItensDaCampanha,
   getSessionSceneState,
   getRegras,
@@ -97,7 +100,7 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
     getRemetentes(campaignId),
     getRoteiros(campaignId),
     getSessionPublicState(campaignId, session.id),
-    getSessionCast(campaignId),
+    getSessionCast(campaignId, session.id),
     getSessionScriptRun(session.id),
     getEncontros(campaignId),
     getAtores(campaignId),
@@ -108,7 +111,7 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
   const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
   return (
     <SessionHub
-      key={JSON.stringify([session.status, session.round, cena.backgroundUrl, cena.tokens.map((token) => [token.id, token.x, token.y, token.visivel, token.characterState]), execucaoRoteiro?.runId, execucaoRoteiro?.sequence, elenco.map((character) => [character.id, character.version, character.characterState, character.attributes, character.resources]), solicitacoes.map((request) => [request.id, request.decision, request.rolled]), sceneState.enabled])}
+      key={JSON.stringify([session.status, session.round, cena.backgroundKey, cena.tokens.map((token) => [token.id, token.x, token.y, token.visivel, token.characterState]), cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]), execucaoRoteiro?.runId, execucaoRoteiro?.sequence, elenco.map((character) => [character.id, character.version, character.characterState, character.attributes, character.resources]), solicitacoes.map((request) => [request.id, request.decision, request.rolled]), sceneState.enabled])}
       campaignId={campaignId}
       session={session}
       initialPublicState={estadoPublico}
@@ -228,7 +231,14 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
   const needsCharacters = area === "characters" || area === "members" || area === "messages";
   const needsAccounts = area === "members" || area === "messages" || area === "characters";
   const needsScene = area === "maps" || area === "collective" || area === "actors";
-  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, itens, regras, auditoria] =
+  const mapSession = area === "maps" ? await getCurrentSession(campaignId) : null;
+  const [mapSceneState, mapCharacters] = mapSession
+    ? await Promise.all([
+        getSessionSceneState(mapSession.id),
+        getSessionCharacters(campaignId, mapSession.id),
+      ])
+    : [{ enabled: true, sceneId: null }, []];
+  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, conexoesMural, itens, regras, auditoria] =
     await Promise.all([
       getNomeCampanha(campaignId),
       needsCharacters ? getCampaignCharacters(campaignId) : Promise.resolve([]),
@@ -236,11 +246,12 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
       area === "messages" ? getRemetentes(campaignId) : Promise.resolve([]),
       area === "settings" ? getPersonalizacao(campaignId) : Promise.resolve(null),
       area === "actors" ? getAtores(campaignId) : Promise.resolve([]),
-      needsScene ? getCenaPrincipal(campaignId) : Promise.resolve(null),
+      needsScene ? getCenaPrincipal(campaignId, area === "maps" ? mapSceneState.sceneId : undefined) : Promise.resolve(null),
       area === "scripts" ? getRoteiros(campaignId) : Promise.resolve([]),
       area === "encounters" ? getEncontros(campaignId) : Promise.resolve([]),
       area === "messages" ? getMensagensDaCampanha(campaignId) : Promise.resolve([]),
       area === "handouts" ? getPistas(campaignId) : Promise.resolve([]),
+      area === "handouts" ? getConexoesDoMural(campaignId) : Promise.resolve([]),
       area === "items" ? getItensDaCampanha(campaignId) : Promise.resolve([]),
       area === "rules" ? getRegras(campaignId) : Promise.resolve(null),
       area === "audit" ? getEventosAuditoria(campaignId) : Promise.resolve([]),
@@ -282,7 +293,16 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
           </section>
         </div>
       )}
-      {area === "handouts" && <HandoutManager campaignId={campaignId} initialItems={pistas} />}
+      {area === "handouts" && <>
+        <LiveSync campaignId={campaignId} fallbackIntervalMs={30_000} />
+        <InvestigationBoard
+          key={JSON.stringify([pistas.map((item) => [item.id, item.board]), conexoesMural])}
+          campaignId={campaignId}
+          initialItems={pistas}
+          initialConnections={conexoesMural}
+        />
+        <HandoutManager key={pistas.map((item) => item.id).join("|")} campaignId={campaignId} initialItems={pistas} />
+      </>}
       {area === "items" && <SessionItemManager campaignId={campaignId} initialItems={itens} />}
       {area === "rules" && (
         regras ? <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -323,7 +343,15 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         <CustomizationManager campaignId={campaignId} initial={personalizacao} />
       )}
       {area === "actors" && cena && <ActorManager campaignId={campaignId} initialActors={atores} sceneId={cena.id} sceneName={cena.nome} />}
-      {area === "maps" && cena && <MapStudio campaignId={campaignId} initialScene={cena} />}
+      {area === "maps" && cena && <>
+        <LiveSync campaignId={campaignId} fallbackIntervalMs={30_000} />
+        <MapStudio
+          key={JSON.stringify([cena.id, cena.backgroundKey, cena.tokens.map((token) => [token.id, token.x, token.y, token.visivel]), cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]), mapCharacters.map((character) => character.id)])}
+          campaignId={campaignId}
+          initialScene={cena}
+          allowedCharacterIds={mapCharacters.map((character) => character.id)}
+        />
+      </>}
       {area === "scripts" && <ScriptStudio campaignId={campaignId} initialScripts={roteiros} />}
     </div>
   );

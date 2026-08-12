@@ -46,7 +46,7 @@ export default async function CharacterSectionPage({
   }
   const session = character.campaignId ? await getCurrentSession(character.campaignId) : null;
   const [cast, notifications, abilityRequests] = await Promise.all([
-    section === "inventory" && session ? getSessionCast(character.campaignId) : Promise.resolve([]),
+    section === "inventory" && session ? getSessionCast(character.campaignId, session.id) : Promise.resolve([]),
     section === "messages" ? getAuthorizedNotifications() : Promise.resolve([]),
     section === "abilities" && session ? getSessionAbilityRequests(session.id) : Promise.resolve([]),
   ]);

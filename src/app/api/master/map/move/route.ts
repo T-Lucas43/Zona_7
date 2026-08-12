@@ -10,6 +10,7 @@ const schema = z.object({
   x: z.number().min(0).max(1),
   y: z.number().min(0).max(1),
   reason: z.string().trim().min(2).max(300),
+  zIndex: z.number().int().positive().optional(),
 });
 
 export async function POST(request: Request) {
@@ -27,6 +28,13 @@ export async function POST(request: Request) {
       p_idempotency_key: crypto.randomUUID(),
     });
     if (error) throw new Error(error.message);
+    if (input.zIndex) {
+      const { error: focusError } = await supabase.from("scene_tokens")
+        .update({ z_index: input.zIndex, updated_at: new Date().toISOString() })
+        .eq("id", input.tokenId)
+        .eq("campaign_id", input.campaignId);
+      if (focusError) throw new Error(focusError.message);
+    }
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(

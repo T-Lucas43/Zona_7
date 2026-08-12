@@ -126,7 +126,7 @@ export function TerminalShell({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <NotificationBell initial={notifications} />
+            <NotificationBell initial={notifications} userId={user.id} />
             <UserProfileMenu user={user} showInstall={area === "player"} />
             <span className="tag">
               <span className="status-dot" /> Canal seguro

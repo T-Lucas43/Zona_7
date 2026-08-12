@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare, Package, Radio, ScrollText, Send, ShieldAlert, Sparkles, Swords, UserRound, Users } from "lucide-react";
+import { Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare, Package, Radio, ScrollText, Send, ShieldAlert, Sparkles, Swords, UserRound, Users } from "lucide-react";
 import { LiveSync } from "@/components/live-sync";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
@@ -66,8 +66,6 @@ export function SessionHub({
   const selected = useMemo(() => characters.find((item) => item.id === selectedId) ?? characters[0], [characters, selectedId]);
   const selectedDetails = details.find((item) => item.characterId === selected?.id);
   const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
-  const featuredEncounter = encounters.find((encounter) => ["active", "paused"].includes(encounter.estado)) ?? encounters[0];
-  const sceneActors = actors.filter((actor) => actor.naCena);
 
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
@@ -172,7 +170,7 @@ export function SessionHub({
 
   return (
     <div id="controle-sessao">
-      <LiveSync campaignId={campaignId} />
+      <LiveSync campaignId={campaignId} fallbackIntervalMs={30_000} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="eyebrow">central da sessão // tela coletiva integrada</p><h1 className="mt-1 text-3xl font-black">{session.title}</h1></div>
         <div className="flex flex-wrap gap-2">
@@ -193,33 +191,8 @@ export function SessionHub({
           <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
         </div>
       </div>
-      <section className="mt-4 grid gap-4 md:grid-cols-2" aria-label="Operações da sessão">
-        <Link className="panel central-card group rounded-lg p-5" href={`/master/campaigns/${campaignId}/encounters`}>
-          <div className="flex items-start justify-between gap-4">
-            <span className="grid size-11 place-items-center rounded-lg bg-[#8a1b27]/25 text-[#ff7784]"><Swords size={20} /></span>
-            <span className="tag">{encounters.length} cadastrado(s)</span>
-          </div>
-          <div className="mt-5 flex items-end justify-between gap-4">
-            <div><p className="eyebrow">controle de combate</p><h2 className="mt-1 text-xl font-extrabold">Encontros</h2><p className="mt-2 text-sm text-[#92959c]">{featuredEncounter ? `${featuredEncounter.nome} · rodada ${featuredEncounter.rodada} · ${featuredEncounter.participantes} participantes` : "Crie o primeiro encontro da sessão."}</p></div>
-            <ArrowRight className="shrink-0 text-[#d84b57] transition-transform group-hover:translate-x-1" size={19} />
-          </div>
-        </Link>
-        <Link className="panel central-card group rounded-lg p-5" href={`/master/campaigns/${campaignId}/actors`}>
-          <div className="flex items-start justify-between gap-4">
-            <span className="grid size-11 place-items-center rounded-lg bg-[#5f3a8b]/25 text-[#b993ef]"><Sparkles size={20} /></span>
-            <span className="tag">{sceneActors.length} em cena</span>
-          </div>
-          <div className="mt-5 flex items-end justify-between gap-4">
-            <div className="min-w-0"><p className="eyebrow">elenco do mestre</p><h2 className="mt-1 text-xl font-extrabold">Entidades e NPCs</h2><div className="mt-3 flex items-center -space-x-2">{actors.slice(0, 5).map((actor) => <CharacterPortrait name={actor.nome} portraitUrl={actor.portraitUrl} className="size-9 rounded-full border-2 border-[#111318]" key={actor.id} />)}{actors.length === 0 && <p className="text-sm text-[#92959c]">Nenhuma entidade cadastrada.</p>}</div></div>
-            <ArrowRight className="shrink-0 text-[#a67ae0] transition-transform group-hover:translate-x-1" size={19} />
-          </div>
-        </Link>
-      </section>
-      <SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} />
-      <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
-        <div className="space-y-4">
-          <SessionScriptControl campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} />
-          <div className="flex justify-end"><button className={`btn ${sceneSyncEnabled ? "border-[#315b45] text-[#7bd5a5]" : "border-[#6d5527] text-[#e8c16d]"}`} type="button" onClick={() => void toggleSceneSync()}>{sceneSyncEnabled ? <EyeOff size={14} /> : <Eye size={14} />}{sceneSyncEnabled ? "Dessincronizar cena" : "Sincronizar cena para jogadores"}</button></div>
+      <div className="mt-4 grid items-start gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="space-y-3">
           <MapStudio
             campaignId={campaignId}
             initialScene={scene}
@@ -227,7 +200,25 @@ export function SessionHub({
             allowedCharacterIds={characters.map((character) => character.id)}
             selectedCharacterId={selected?.id}
             onSelectCharacter={(characterId) => { setSelectedId(characterId); setMessageReview(false); }}
+            stackControls
           />
+          <div className="flex justify-end"><button className={`btn ${sceneSyncEnabled ? "border-[#315b45] text-[#7bd5a5]" : "border-[#6d5527] text-[#e8c16d]"}`} type="button" onClick={() => void toggleSceneSync()}>{sceneSyncEnabled ? <EyeOff size={14} /> : <Eye size={14} />}{sceneSyncEnabled ? "Dessincronizar cena" : "Sincronizar cena para jogadores"}</button></div>
+        </div>
+        <aside>
+          {selected ? <section className="panel rounded-lg p-5" id="acoes-rapidas" aria-live="polite">
+            <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">ações rápidas</p><h2 className="text-xl font-extrabold">{selected.name}</h2></div><button className="btn px-3" type="button" onClick={() => void toggleVisibility()}>{visible.has(selected.id) ? <EyeOff size={14} /> : <Eye size={14} />}{visible.has(selected.id) ? "Ocultar" : "Mostrar"}</button></div>
+            <div className="mt-4 flex items-center gap-2"><HeartPulse size={16} className="text-[#df4855]" /><strong className="text-sm">Dano, cura e recursos</strong></div>
+            <div className="mt-3 grid grid-cols-[1fr_0.65fr] gap-2"><select className="field" value={resource} onChange={(event) => setResource(event.target.value as ResourceKind)}><option value="pv">PV</option><option value="pe">PE</option><option value="san">SAN</option></select><input className="field" type="number" min="1" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div>
+            <input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da alteração" />
+            <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn border-[#6e252e] text-[#f0949d]" type="button" onClick={() => void mutateResource(-1)}>Aplicar dano/perda</button><button className="btn border-[#2f6147] text-[#7bd5a5]" type="button" onClick={() => void mutateResource(1)}>Curar/recuperar</button></div>
+            <CharacterLiveControls campaignId={campaignId} character={selected} onChange={(updated) => setCharacters((items) => items.map((item) => item.id === updated.id ? updated : item))} />
+          </section> : <section className="panel rounded-lg border-dashed p-5 text-sm text-[#858890]">As ações rápidas aparecerão quando um jogador entrar na sessão.</section>}
+        </aside>
+      </div>
+      <SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} />
+      <div className="mt-4"><SessionScriptControl key={scripts.map((script) => `${script.id}:${script.versao}`).join("|")} campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} /></div>
+      <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="space-y-4">
           <section className="panel rounded-lg p-5">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Users size={17} className="text-[#d84b57]" /><h2 className="font-extrabold">Personagens da sessão</h2></div><span className="tag">clique para controlar</span></div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -253,14 +244,6 @@ export function SessionHub({
           </form>
         </div>
         <aside className="space-y-4">
-          {selected && <section className="panel rounded-lg p-5" id="acoes-rapidas" aria-live="polite">
-            <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">ações rápidas</p><h2 className="text-xl font-extrabold">{selected.name}</h2></div><button className="btn px-3" type="button" onClick={() => void toggleVisibility()}>{visible.has(selected.id) ? <EyeOff size={14} /> : <Eye size={14} />}{visible.has(selected.id) ? "Ocultar" : "Mostrar"}</button></div>
-            <div className="mt-4 flex items-center gap-2"><HeartPulse size={16} className="text-[#df4855]" /><strong className="text-sm">Dano, cura e recursos</strong></div>
-            <div className="mt-3 grid grid-cols-[1fr_0.65fr] gap-2"><select className="field" value={resource} onChange={(event) => setResource(event.target.value as ResourceKind)}><option value="pv">PV</option><option value="pe">PE</option><option value="san">SAN</option></select><input className="field" type="number" min="1" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div>
-            <input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da alteração" />
-            <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn border-[#6e252e] text-[#f0949d]" type="button" onClick={() => void mutateResource(-1)}>Aplicar dano/perda</button><button className="btn border-[#2f6147] text-[#7bd5a5]" type="button" onClick={() => void mutateResource(1)}>Curar/recuperar</button></div>
-            <CharacterLiveControls campaignId={campaignId} character={selected} onChange={(updated) => setCharacters((items) => items.map((item) => item.id === updated.id ? updated : item))} />
-          </section>}
           {selected && selectedDetails && (
             <section className="panel session-sheet rounded-lg p-5">
               <div className="flex items-center gap-3">

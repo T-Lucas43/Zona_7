@@ -84,19 +84,23 @@ export function SessionScriptControl({
         <span className="tag"><RadioTower size={12} /> {run ? statusLabels[run.status] ?? run.status : "Aguardando início"}</span>
       </div>
 
+      <div className="mt-4 rounded-lg border border-[#4c2a30] bg-black/20 p-3">
+        <label className="text-xs font-bold">
+          Roteiro publicado disponível na Central
+          <select className="field mt-1" value={selectedScript} onChange={(event) => setSelectedScript(event.target.value)}>
+            {scripts.map((script) => <option value={script.id} key={script.id}>{script.nome} · v{script.versao}</option>)}
+          </select>
+        </label>
+        {run && scripts.length > 0 && <p className="mt-2 text-xs text-[#92959c]">A execução atual continua preservada. O roteiro selecionado fica pronto para a próxima execução.</p>}
+        {scripts.length === 0 && <p className="mt-2 text-xs text-[#f0a5ad]">Publique um roteiro; ele aparecerá aqui automaticamente.</p>}
+      </div>
+
       {!run ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
-          <label className="text-xs font-bold">
-            Roteiro publicado
-            <select className="field mt-1" value={selectedScript} onChange={(event) => setSelectedScript(event.target.value)}>
-              {scripts.map((script) => <option value={script.id} key={script.id}>{script.nome} · v{script.versao}</option>)}
-            </select>
-          </label>
-          <button className="btn btn-primary self-end" type="button" disabled={!canStart || pending} onClick={() => void control("start")}>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button className="btn btn-primary" type="button" disabled={!canStart || pending} onClick={() => void control("start")}>
             <Play size={15} /> Iniciar roteiro
           </button>
-          {scripts.length === 0 && <p className="text-xs text-[#f0a5ad] md:col-span-2">Publique um roteiro antes de iniciar a execução.</p>}
-          {sessionStatus !== "active" && <p className="text-xs text-[#e2b341] md:col-span-2">Inicie a sessão para liberar o roteiro ao mestre.</p>}
+          {sessionStatus !== "active" && <p className="text-xs text-[#e2b341]">Inicie a sessão para liberar o roteiro ao mestre.</p>}
         </div>
       ) : (
         <div className="mt-4">

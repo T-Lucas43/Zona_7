@@ -1,16 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { BellRing, X } from "lucide-react";
+import { liveNotificationEvent, mergeNotifications } from "@/lib/notification-events";
 import type { PlayerNotification } from "@/server/repositories/character-repository";
 
 export function LiveNotificationOverlay({ notifications }: { notifications: PlayerNotification[] }) {
-  const latest = useMemo(() => notifications.find((item) => !item.acknowledged), [notifications]);
+  const [items, setItems] = useState(notifications);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const item = (event as CustomEvent<PlayerNotification>).detail;
+      setItems((current) => mergeNotifications([item], current));
+    };
+    window.addEventListener(liveNotificationEvent, receive);
+    return () => window.removeEventListener(liveNotificationEvent, receive);
+  }, []);
+  const allItems = mergeNotifications(notifications, items);
+  const latest = allItems.find((item) => !item.acknowledged);
   const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
   if (!latest || dismissed.has(latest.id)) return null;
   const item = latest;
   async function close() {
     setDismissed((current) => new Set(current).add(item.id));
+    setItems((current) => current.map((value) => value.id === item.id ? { ...value, acknowledged: true, read: true } : value));
     await fetch("/api/notifications/acknowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: item.id }) });
   }
   return <div className="fixed inset-x-4 top-20 z-[80] mx-auto max-w-lg animate-[pulse_0.35s_ease-out_1] rounded-xl border border-[#b83240] bg-[#17191f] p-5 shadow-2xl shadow-black/70" role="alert">

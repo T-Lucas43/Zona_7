@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Bell, Check, Package, ScrollText } from "lucide-react";
 import { demoRealtimeChannel, type DemoRealtimeEvent } from "@/lib/demo-realtime";
+import { liveNotificationEvent } from "@/lib/notification-events";
 import type { PlayerNotification } from "@/server/repositories/character-repository";
 
 export function NotificationCenter({ initial, authorizedCharacterIds }: { initial: PlayerNotification[]; authorizedCharacterIds: string[] }) {
@@ -24,6 +25,14 @@ export function NotificationCenter({ initial, authorizedCharacterIds }: { initia
     };
     return () => channel.close();
   }, [authorizedCharacterIds]);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const item = (event as CustomEvent<PlayerNotification>).detail;
+      setRealtimeItems((current) => current.some((value) => value.id === item.id) ? current : [item, ...current]);
+    };
+    window.addEventListener(liveNotificationEvent, receive);
+    return () => window.removeEventListener(liveNotificationEvent, receive);
+  }, []);
   const items = useMemo(
     () => [...realtimeItems, ...initial].map((item) => acknowledgedIds.has(item.id) ? { ...item, acknowledged: true, read: true } : item),
     [acknowledgedIds, initial, realtimeItems],

@@ -1,17 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, Check, X } from "lucide-react";
+import { isSupabaseConfigured } from "@/lib/config";
+import { mergeNotifications, publishLiveNotification } from "@/lib/notification-events";
+import { createClient } from "@/lib/supabase/client";
 import type { PlayerNotification } from "@/server/repositories/character-repository";
 
-export function NotificationBell({ initial }: { initial: PlayerNotification[] }) {
+function fromRealtime(row: Record<string, unknown>): PlayerNotification {
+  return {
+    id: String(row.id),
+    type: String(row.type ?? "notification"),
+    title: String(row.title ?? "Nova atualização"),
+    preview: String(row.safe_preview ?? "Você recebeu uma nova atualização."),
+    read: Boolean(row.read_at),
+    acknowledged: Boolean(row.acknowledged_at),
+    createdAt: String(row.created_at ?? new Date().toISOString()),
+  };
+}
+
+export function NotificationBell({ initial, userId }: { initial: PlayerNotification[]; userId: string }) {
+  const [notifications, setNotifications] = useState(initial);
   const [acknowledged, setAcknowledged] = useState<Set<string>>(() => new Set());
   const [open, setOpen] = useState(false);
-  const items = initial.map((item) => acknowledged.has(item.id) ? { ...item, acknowledged: true, read: true } : item);
+  const knownIds = useRef(new Set(initial.map((item) => item.id)));
+  useEffect(() => {
+    let disposed = false;
+    const receive = (item: PlayerNotification) => {
+      if (disposed) return;
+      const isNew = !knownIds.current.has(item.id);
+      knownIds.current.add(item.id);
+      setNotifications((current) => mergeNotifications([item], current));
+      if (isNew && !item.acknowledged) publishLiveNotification(item);
+    };
+    const reload = async () => {
+      try {
+        const response = await fetch("/api/notifications/acknowledge", { cache: "no-store" });
+        if (!response.ok) return;
+        const result = await response.json() as { items?: PlayerNotification[] };
+        for (const item of result.items ?? []) receive(item);
+      } catch {
+        // The next realtime event, focus recovery or poll retries automatically.
+      }
+    };
+    if (!isSupabaseConfigured) return;
+    const client = createClient();
+    const channel = client
+      .channel(`notifications:${userId}:${crypto.randomUUID()}`)
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${userId}`,
+      }, (payload) => receive(fromRealtime(payload.new as Record<string, unknown>)))
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") void reload();
+      });
+    const recover = () => {
+      if (document.visibilityState === "visible") void reload();
+    };
+    const pollTimer = window.setInterval(recover, 5_000);
+    window.addEventListener("online", recover);
+    window.addEventListener("focus", recover);
+    document.addEventListener("visibilitychange", recover);
+    return () => {
+      disposed = true;
+      window.clearInterval(pollTimer);
+      window.removeEventListener("online", recover);
+      window.removeEventListener("focus", recover);
+      document.removeEventListener("visibilitychange", recover);
+      void client.removeChannel(channel);
+    };
+  }, [userId]);
+  const items = mergeNotifications(initial, notifications).map((item) => acknowledged.has(item.id) ? { ...item, acknowledged: true, read: true } : item);
   const unread = items.filter((item) => !item.acknowledged).length;
   async function acknowledge(id: string) {
     const response = await fetch("/api/notifications/acknowledge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: id }) });
-    if (response.ok) setAcknowledged((current) => new Set(current).add(id));
+    if (response.ok) {
+      setAcknowledged((current) => new Set(current).add(id));
+      setNotifications((current) => current.map((item) => item.id === id ? { ...item, acknowledged: true, read: true } : item));
+    }
   }
   return <div className="relative">
     <button className="btn relative px-3" type="button" onClick={() => setOpen((value) => !value)} aria-label={`${unread} notificações`}><Bell size={16} />{unread > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-[#c52b3a] text-[0.6rem] font-black">{Math.min(unread, 9)}</span>}</button>

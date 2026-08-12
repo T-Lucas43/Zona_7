@@ -123,7 +123,7 @@ export async function getSessionPublicState(
   };
 }
 
-export async function getSessionCast(campaignId = demoCampaignId): Promise<SessionCastMember[]> {
+export async function getSessionCast(campaignId = demoCampaignId, sessionId?: string): Promise<SessionCastMember[]> {
   if (!isSupabaseConfigured)
     return characters.map((character) => ({
       id: `actor-${character.id}`,
@@ -133,7 +133,21 @@ export async function getSessionCast(campaignId = demoCampaignId): Promise<Sessi
       color: "#b52532",
     }));
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let characterIds: string[] | null = null;
+  if (sessionId) {
+    const { data: participants, error: participantError } = await supabase
+      .from("session_participants")
+      .select("character_id")
+      .eq("campaign_id", campaignId)
+      .eq("session_id", sessionId)
+      .eq("status", "online")
+      .gte("last_seen_at", new Date(Date.now() - 60_000).toISOString())
+      .not("character_id", "is", null);
+    if (participantError) throw new Error(`Falha ao carregar participantes ativos: ${participantError.message}`);
+    characterIds = [...new Set(participants.flatMap((item) => item.character_id ? [item.character_id] : []))];
+    if (characterIds.length === 0) return [];
+  }
+  let query = supabase
     .from("actors")
     .select("id,character_id,name,public_description,color")
     .eq("campaign_id", campaignId)
@@ -141,6 +155,8 @@ export async function getSessionCast(campaignId = demoCampaignId): Promise<Sessi
     .eq("visibility", "campaign")
     .is("deleted_at", null)
     .order("name");
+  if (characterIds) query = query.in("character_id", characterIds);
+  const { data, error } = await query;
   if (error) throw new Error(`Falha ao carregar personagens da sessão: ${error.message}`);
   return data.map((actor) => ({
     id: actor.id,
