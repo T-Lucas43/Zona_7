@@ -2,6 +2,8 @@ import { Archive, CheckCircle2, EyeOff, LockKeyhole, MessageSquare, Package, Spa
 import { AbilityDetails } from "@/components/character/ability-details";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
+import { InvestigationBoard } from "@/components/master/investigation-board";
+import { LiveSync } from "@/components/live-sync";
 import { NotificationCenter } from "@/components/player/notification-center";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
 import {
@@ -14,9 +16,10 @@ import {
   getCharacterSkills,
   getCharacterWeaknesses,
   getAuthorizedNotifications,
+  getAuthorizedInvestigationBoard,
   getSessionAbilityRequests,
 } from "@/server/repositories/character-repository";
-import { getCurrentSession, getSessionCast } from "@/server/repositories/session-repository";
+import { demoCampaignId, getCurrentSession, getSessionCast } from "@/server/repositories/session-repository";
 
 export default async function CharacterSectionPage({
   params,
@@ -44,7 +47,8 @@ export default async function CharacterSectionPage({
       </section>
     );
   }
-  const session = character.campaignId ? await getCurrentSession(character.campaignId) : null;
+  const campaignId = character.campaignId ?? demoCampaignId;
+  const session = await getCurrentSession(campaignId);
   const [cast, notifications, abilityRequests] = await Promise.all([
     section === "inventory" && session ? getSessionCast(character.campaignId, session.id) : Promise.resolve([]),
     section === "messages" ? getAuthorizedNotifications() : Promise.resolve([]),
@@ -118,7 +122,7 @@ export default async function CharacterSectionPage({
                   ))}
                   {ability.limit && <span className="tag">{ability.limit}</span>}
                 </div>
-                {ability.state === "unlocked" && session && !["dying", "dead"].includes(character.characterState ?? "") && <AbilityRequestButton campaignId={character.campaignId!} sessionId={session.id} characterId={character.id} abilityId={ability.id} pendingRequest={(() => { const request = abilityRequests.find((item) => item.characterAbilityId === ability.id); return request ? { id: request.id, decision: request.decision, rolled: request.rolled } : undefined; })()} />}
+                {ability.state === "unlocked" && session && !["dying", "dead"].includes(character.characterState ?? "") && <AbilityRequestButton campaignId={campaignId} sessionId={session.id} characterId={character.id} abilityId={ability.id} pendingRequest={(() => { const request = abilityRequests.find((item) => item.characterAbilityId === ability.id); return request ? { id: request.id, decision: request.decision, rolled: request.rolled } : undefined; })()} />}
               </article>
             ))}
           </div>
@@ -221,7 +225,10 @@ export default async function CharacterSectionPage({
         </div>
       )}
       {section === "handouts" && (
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <div>
+          <LiveSync campaignId={character.campaignId ?? "11111111-1111-4111-8111-111111111111"} />
+          <PlayerInvestigationBoard />
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {handouts.map((item) => (
             <article className="panel rounded-lg p-5" key={item.id}>
               {item.locked ? (
@@ -240,6 +247,7 @@ export default async function CharacterSectionPage({
               {!item.locked && item.content && <p className="mt-3 rounded border border-[#30333a] bg-black/20 p-3 text-sm leading-6">{item.content}</p>}
             </article>
           ))}
+          </div>
         </div>
       )}
       {section === "history" && (
@@ -249,4 +257,13 @@ export default async function CharacterSectionPage({
       )}
     </div>
   );
+}
+
+async function PlayerInvestigationBoard() {
+  const board = await getAuthorizedInvestigationBoard();
+  return <InvestigationBoard
+    readOnly
+    initialItems={board.items}
+    initialConnections={board.connections}
+  />;
 }

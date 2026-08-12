@@ -81,9 +81,11 @@ const nodeTypeLabels: Record<string, string> = {
 export function ScriptStudio({
   campaignId,
   initialScripts,
+  sessionId,
 }: {
   campaignId: string;
   initialScripts: RoteiroDaCampanha[];
+  sessionId?: string;
 }) {
   const [source, setSource] = useState(exemplo);
   const [format, setFormat] = useState<"markdown" | "json">("markdown");
@@ -92,6 +94,8 @@ export function ScriptStudio({
   const [aviso, setAviso] = useState("");
   const [atual, setAtual] = useState<string | null>(null);
   const [importando, setImportando] = useState(false);
+  const [publicando, setPublicando] = useState(false);
+  const [publishedScripts, setPublishedScripts] = useState(initialScripts);
   const [publishedId, setPublishedId] = useState(initialScripts[0]?.id ?? "");
   const [runId, setRunId] = useState("");
   const [runStatus, setRunStatus] = useState("preparando");
@@ -121,16 +125,32 @@ export function ScriptStudio({
     setAviso("Validação concluída. Nenhuma ação foi executada.");
   }
   async function publicar() {
+    setPublicando(true);
     const response = await fetch("/api/master/scripts/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ campaignId, source, format }),
     });
-    const result = (await response.json()) as { id?: string; version?: number; error?: string };
-    if (response.ok && result.id) setPublishedId(result.id);
+    const result = (await response.json()) as { id?: string; version?: number; title?: string; reused?: boolean; error?: string };
+    setPublicando(false);
+    if (response.ok && result.id) {
+      setPublishedId(result.id);
+      setPublishedScripts((items) => {
+        const next = {
+          id: result.id!,
+          nome: result.title ?? documento?.title ?? "Roteiro publicado",
+          descricao: "Disponível na Central da Sessão",
+          estado: "published",
+          versao: result.version ?? 1,
+        };
+        return [next, ...items.filter((item) => item.id !== next.id)];
+      });
+    }
     setAviso(
       response.ok
-        ? `Roteiro publicado como versão ${result.version}.`
+        ? result.reused
+          ? `Este conteúdo já era a versão ${result.version}; o roteiro foi republicado e está disponível na Central.`
+          : `Roteiro publicado como versão ${result.version} e enviado à Central da Sessão.`
         : (result.error ?? "Falha ao publicar."),
     );
   }
@@ -176,6 +196,7 @@ export function ScriptStudio({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         campaignId,
+        sessionId,
         action,
         scriptPackageId: action === "start" ? publishedId : undefined,
         runId: action === "start" ? undefined : runId,
@@ -215,7 +236,7 @@ export function ScriptStudio({
               <Waypoints size={18} className="text-[#d84b57]" />
               <h2 className="font-extrabold">Roteiros cadastrados</h2>
             </div>
-            {initialScripts.map((roteiro) => (
+            {publishedScripts.map((roteiro) => (
               <button
                 type="button"
                 className={`mt-3 w-full rounded border p-3 text-left ${publishedId === roteiro.id ? "border-[#6c343a] bg-[#8a1b27]/10" : "border-[#30333a]"}`}
@@ -277,10 +298,10 @@ export function ScriptStudio({
             <button
               className="btn btn-primary"
               type="button"
-              disabled={!documento || issues.some((issue) => issue.severity === "error")}
+              disabled={source.trim().length < 10 || importando || publicando}
               onClick={() => void publicar()}
             >
-              <FileCode2 size={14} /> Publicar nova versão
+              <FileCode2 size={14} /> {publicando ? "Publicando..." : "Validar e publicar"}
             </button>
           </div>
         </section>
@@ -347,7 +368,7 @@ export function ScriptStudio({
             <button
               className="btn btn-primary"
               type="button"
-              disabled={!publishedId || reason.trim().length < 2}
+              disabled={!publishedId || !sessionId || reason.trim().length < 2}
               onClick={() => void controlar("start")}
             >
               <Play size={14} /> Executar versão publicada
@@ -391,6 +412,7 @@ export function ScriptStudio({
             </>
           )}
         </div>
+        {!sessionId && <p className="mt-3 text-xs text-[#e2b341]">Crie uma sessão antes de executar este roteiro. A publicação continua disponível na Central.</p>}
       </section>
       {issues.length > 0 && (
         <section className="panel rounded-lg p-4">

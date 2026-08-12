@@ -1,17 +1,16 @@
+import Image from "next/image";
+
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <span className="wordmark" aria-label="Zona 7 - Terminal">
-      <span className="wordmark-mark" aria-hidden="true">
-        <span>Z7</span>
-      </span>
-      {!compact && (
-        <span>
-          Zona 7{" "}
-          <span className="font-mono text-[0.65em] font-medium tracking-[0.12em] text-[#8f929a]">
-            / Terminal
-          </span>
-        </span>
-      )}
+    <span className={`wordmark ${compact ? "wordmark-compact" : ""}`} aria-label="Zona 7: A Convergência">
+      <Image
+        className="brand-logo"
+        src="/zona-7-convergencia-logo.png"
+        width={1140}
+        height={760}
+        sizes={compact ? "56px" : "(max-width: 860px) 220px, 260px"}
+        alt="Zona 7: A Convergência"
+      />
     </span>
   );
 }

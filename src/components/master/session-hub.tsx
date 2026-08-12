@@ -22,6 +22,11 @@ import type { AbilityUseRequest, SessionCharacterDetails } from "@/server/reposi
 
 const resourceLabels: Record<ResourceKind, string> = { pv: "PV", pe: "PE", san: "SAN" };
 
+function isItemInUse(state: string) {
+  const normalized = state.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return normalized.includes("equipado") || normalized.includes("em uso") || normalized.includes("usado") || normalized.includes("ativo");
+}
+
 export function SessionHub({
   campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, encounters, actors, items, handouts, initialAbilityRequests, initialSceneSyncEnabled, visibleCharacterIds,
 }: {
@@ -66,6 +71,11 @@ export function SessionHub({
   const selected = useMemo(() => characters.find((item) => item.id === selectedId) ?? characters[0], [characters, selectedId]);
   const selectedDetails = details.find((item) => item.characterId === selected?.id);
   const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
+  const selectedActiveItems = selectedDetails?.inventory.filter((item) => isItemInUse(item.state)) ?? [];
+  const activeItemsByCharacter = useMemo(() => new Map(details.map((detail) => [
+    detail.characterId,
+    detail.inventory.filter((item) => isItemInUse(item.state)).map((item) => item.name),
+  ])), [details]);
 
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
@@ -171,28 +181,26 @@ export function SessionHub({
   return (
     <div id="controle-sessao">
       <LiveSync campaignId={campaignId} fallbackIntervalMs={30_000} />
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="eyebrow">central da sessão // tela coletiva integrada</p><h1 className="mt-1 text-3xl font-black">{session.title}</h1></div>
-        <div className="flex flex-wrap gap-2">
-          <Link className="btn" href={`/master/campaigns/${campaignId}/encounters`}><Swords size={15} /> Encontros</Link>
-          <Link className="btn" href={`/master/campaigns/${campaignId}/actors`}><Sparkles size={15} /> Entidades e NPCs</Link>
-          <Link className="btn" href={`/master/campaigns/${campaignId}/items`}><Package size={15} /> Itens da sessão</Link>
-          <span className="tag"><Radio size={12} /> {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}</span>
-        </div>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#32353c] bg-[#111318] p-4">
-        <div><p className="text-xs text-[#7d8087]">CENA PÚBLICA ATUAL</p><strong>{publicState.sceneTitle} · Pressão {session.pressure}/7</strong></div>
-        <div className="flex flex-wrap items-center gap-3">
+      <section className="panel rounded-lg p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="eyebrow">central da sessão // comando integrado</p><div className="mt-1 flex flex-wrap items-center gap-3"><h1 className="text-2xl font-black">{session.title}</h1><span className="tag"><Radio size={12} /> {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}</span></div></div>
+          <div className="flex flex-wrap items-center gap-2">
           <SessionClock
             initialElapsedSeconds={session.elapsedSeconds ?? 0}
             initialTimerStartedAt={session.timerStartedAt}
             initialStatus={session.status}
           />
           <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
+          </div>
         </div>
-      </div>
-      <div className="mt-4"><SessionScriptControl key={scripts.map((script) => `${script.id}:${script.versao}`).join("|")} campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} /></div>
-      <div className="mt-4 grid items-start gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#2d3037] pt-3">
+          <p className="min-w-0 text-sm"><span className="text-xs text-[#7d8087]">CENA PÚBLICA</span> <strong className="ml-2">{publicState.sceneTitle}</strong> <span className="text-[#92959c]">· Pressão {session.pressure}/7 · {characters.length} conectado(s)</span></p>
+          <div className="flex flex-wrap gap-2"><Link className="btn px-3 py-2" href={`/master/campaigns/${campaignId}/encounters`}><Swords size={14} /> Encontros</Link><Link className="btn px-3 py-2" href={`/master/campaigns/${campaignId}/actors`}><Sparkles size={14} /> Entidades</Link><Link className="btn px-3 py-2" href={`/master/campaigns/${campaignId}/items`}><Package size={14} /> Itens</Link></div>
+        </div>
+      </section>
+      <nav className="session-jump-nav mt-2" aria-label="Atalhos da Central"><a href="#roteiro-sessao">Roteiro</a><a href="#mapa-sessao">Mapa e ações</a><a href="#operacoes-sessao">Operações</a><a href="#jogadores-sessao">Jogadores</a><a href="#transmissao-sessao">Transmissão</a></nav>
+      <div className="mt-3 scroll-mt-20" id="roteiro-sessao"><SessionScriptControl key={scripts.map((script) => `${script.id}:${script.versao}`).join("|")} campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} /></div>
+      <div className="mt-3 grid scroll-mt-20 items-start gap-4 2xl:grid-cols-[1.35fr_0.65fr]" id="mapa-sessao">
         <div className="space-y-3">
           <MapStudio
             campaignId={campaignId}
@@ -212,12 +220,13 @@ export function SessionHub({
             <div className="mt-3 grid grid-cols-[1fr_0.65fr] gap-2"><select className="field" value={resource} onChange={(event) => setResource(event.target.value as ResourceKind)}><option value="pv">PV</option><option value="pe">PE</option><option value="san">SAN</option></select><input className="field" type="number" min="1" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div>
             <input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da alteração" />
             <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn border-[#6e252e] text-[#f0949d]" type="button" onClick={() => void mutateResource(-1)}>Aplicar dano/perda</button><button className="btn border-[#2f6147] text-[#7bd5a5]" type="button" onClick={() => void mutateResource(1)}>Curar/recuperar</button></div>
+            <div className="mt-4 rounded-lg border border-[#30333a] bg-black/15 p-3"><div className="flex items-center gap-2"><Backpack size={15} className="text-[#e7bd69]" /><strong className="text-xs">Itens em uso</strong></div><div className="mt-2 flex flex-wrap gap-2">{selectedActiveItems.map((item) => <span className="tag border-[#5b4b2c] text-[#e6c780]" key={item.id}>{item.name}</span>)}{selectedActiveItems.length === 0 && <span className="text-xs text-[#777a82]">Nenhum item equipado ou em uso.</span>}</div></div>
             <CharacterLiveControls campaignId={campaignId} character={selected} onChange={(updated) => setCharacters((items) => items.map((item) => item.id === updated.id ? updated : item))} />
           </section> : <section className="panel rounded-lg border-dashed p-5 text-sm text-[#858890]">As ações rápidas aparecerão quando um jogador entrar na sessão.</section>}
         </aside>
       </div>
-      <SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} />
-      <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
+      <div className="scroll-mt-20" id="operacoes-sessao"><SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} /></div>
+      <div className="mt-4 grid scroll-mt-20 gap-4 2xl:grid-cols-[1.35fr_0.65fr]" id="jogadores-sessao">
         <div className="space-y-4">
           <section className="panel rounded-lg p-5">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Users size={17} className="text-[#d84b57]" /><h2 className="font-extrabold">Personagens da sessão</h2></div><span className="tag">clique para controlar</span></div>
@@ -226,6 +235,7 @@ export function SessionHub({
                 <button type="button" onClick={() => { setSelectedId(character.id); setMessageReview(false); }} key={character.id} className={`central-card rounded-lg border p-4 text-left transition ${selected?.id === character.id ? "border-[#a83a45] bg-[#8a1b27]/15" : "border-[#30333a] bg-black/10"}`}>
                   <div className="flex items-center gap-3"><CharacterPortrait name={character.name} portraitUrl={character.portraitUrl} className="size-12 rounded-lg" /><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><strong className="truncate">{character.name}</strong>{visible.has(character.id) ? <Eye size={15} className="shrink-0 text-[#7bd5a5]" /> : <EyeOff size={15} className="shrink-0 text-[#d98b93]" />}</div><p className="mt-1 truncate text-xs text-[#858891]">{character.codename ?? character.role} · NEX {character.nex}%</p></div></div>
                   <div className="mt-3 flex flex-wrap gap-2">{Object.values(character.resources).map((item) => <span className="tag" key={item.kind}>{item.kind.toUpperCase()} {item.current}/{item.maximum}</span>)}</div>
+                  {(activeItemsByCharacter.get(character.id)?.length ?? 0) > 0 && <p className="mt-3 flex items-center gap-1.5 text-xs text-[#e3c276]"><Backpack size={13} /> Em uso: {activeItemsByCharacter.get(character.id)?.join(", ")}</p>}
                 </button>
               ))}
               {characters.length === 0 && (
@@ -235,7 +245,7 @@ export function SessionHub({
               )}
             </div>
           </section>
-          <form className="panel rounded-lg p-5" onSubmit={savePublicState}>
+          <form className="panel scroll-mt-20 rounded-lg p-5" id="transmissao-sessao" onSubmit={savePublicState}>
             <div className="flex items-center gap-2"><Radio size={17} className="text-[#d84b57]" /><div><p className="eyebrow">somente conteúdo seguro</p><h2 className="font-extrabold">O que os jogadores veem</h2></div></div>
             <label className="mt-4 block text-xs font-bold">Título da cena<input className="field mt-1" value={publicState.sceneTitle} onChange={(event) => setPublicState((state) => ({ ...state, sceneTitle: event.target.value }))} /></label>
             <label className="mt-3 block text-xs font-bold">Resumo público<textarea className="field mt-1 min-h-24" value={publicState.publicSummary} onChange={(event) => setPublicState((state) => ({ ...state, publicSummary: event.target.value }))} /></label>

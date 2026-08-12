@@ -138,6 +138,38 @@ export type RoteiroDaCampanha = {
   versao: number;
 };
 
+export type PaginaCadernoDaCampanha = {
+  id: string;
+  ownerUserId: string;
+  characterId: string;
+  pageNumber: number;
+  title: string;
+  content: string;
+  linkedHandoutIds: string[];
+  updatedAt: string;
+};
+
+export async function getCadernosDaCampanha(campaignId: string): Promise<PaginaCadernoDaCampanha[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("player_notebook_pages")
+    .select("id,user_id,character_id,page_number,title,content,linked_handout_ids,updated_at")
+    .eq("campaign_id", campaignId)
+    .order("page_number");
+  if (error) throw new Error(`Falha ao carregar cadernos: ${error.message}`);
+  return data.map((page) => ({
+    id: page.id,
+    ownerUserId: page.user_id,
+    characterId: page.character_id,
+    pageNumber: page.page_number,
+    title: page.title,
+    content: page.content,
+    linkedHandoutIds: page.linked_handout_ids ?? [],
+    updatedAt: page.updated_at,
+  }));
+}
+
 export type CampanhaResumo = {
   id: string;
   nome: string;

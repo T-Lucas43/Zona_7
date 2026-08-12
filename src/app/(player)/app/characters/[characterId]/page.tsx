@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, BookOpen, Boxes, Crosshair, Gauge, ListChecks, Mail, NotebookPen } from "lucide-react";
+import { AlertTriangle, BookOpen, BookOpenText, Boxes, Crosshair, Gauge, ListChecks, Mail, NotebookPen } from "lucide-react";
 import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
 import { CharacterSheetOverview } from "@/components/character/character-sheet-overview";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
@@ -42,6 +42,7 @@ export default async function CharacterPage({ params }: { params: Promise<{ char
     ["combat", "Combate", Crosshair],
     ["messages", "Mensagens", Mail],
     ["handouts", "Pistas", BookOpen],
+    ["notebook", "Livro de anotações", BookOpenText],
     ["history", "Histórico", NotebookPen],
   ] as const;
 
@@ -53,7 +54,7 @@ export default async function CharacterPage({ params }: { params: Promise<{ char
       </div>
       <CharacterSheetOverview character={character} skills={skills} actions={actions} abilities={safeAbilities} weaknesses={weaknesses} inventory={inventory} />
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
-        {sections.filter(([slug]) => allowed(slug)).map(([slug, label, Icon]) => (
+        {sections.filter(([slug]) => slug === "notebook" || allowed(slug)).map(([slug, label, Icon]) => (
           <Link href={`/app/characters/${character.id}/${slug}`} className="btn h-auto flex-col py-4 text-center" key={slug}><Icon size={19} /><span>{label}</span></Link>
         ))}
       </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { isSupabaseConfigured } from "@/lib/config";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { executeDiceRoll } from "@/lib/dice/parser";
@@ -9,24 +10,30 @@ import { requireCampaignMaster } from "@/server/services/master-access";
 const schema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("request"),
-    campaignId: z.uuid(),
-    sessionId: z.uuid(),
-    characterId: z.uuid(),
-    characterAbilityId: z.uuid(),
+    campaignId: z.string().min(1).max(100),
+    sessionId: z.string().min(1).max(100),
+    characterId: z.string().min(1).max(100),
+    characterAbilityId: z.string().min(1).max(100),
     context: z.string().trim().max(1_000).default("Solicitação durante a sessão"),
   }),
   z.object({
     action: z.literal("resolve"),
-    campaignId: z.uuid(),
-    requestId: z.uuid(),
+    campaignId: z.string().min(1).max(100),
+    requestId: z.string().min(1).max(100),
     approved: z.boolean(),
   }),
-  z.object({ action: z.literal("roll"), requestId: z.uuid() }),
+  z.object({ action: z.literal("roll"), requestId: z.string().min(1).max(100) }),
 ]);
 
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
+    if (!isSupabaseConfigured) {
+      if (input.action === "request") return NextResponse.json({ requestId: crypto.randomUUID(), demo: true }, { status: 201 });
+      if (input.action === "resolve") return NextResponse.json({ approved: input.approved, demo: true });
+      const result = executeDiceRoll("1d20");
+      return NextResponse.json({ ...result, id: crypto.randomUUID(), demo: true }, { status: 201 });
+    }
     const supabase = await createClient();
     if (input.action === "resolve") {
       const user = await requireCampaignMaster(input.campaignId);

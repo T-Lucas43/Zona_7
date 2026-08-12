@@ -6,11 +6,11 @@ import { requireCampaignMaster } from "@/server/services/master-access";
 import { getScriptRunSnapshot } from "@/server/repositories/script-repository";
 
 const schema = z.object({
-  campaignId: z.string().uuid(),
-  sessionId: z.string().uuid(),
+  campaignId: z.string().min(1).max(100),
+  sessionId: z.string().min(1).max(100),
   action: z.enum(["start", "advance", "pause", "resume", "improvise", "complete"]),
-  scriptPackageId: z.string().uuid().optional(),
-  runId: z.string().uuid().optional(),
+  scriptPackageId: z.string().min(1).max(100).optional(),
+  runId: z.string().min(1).max(100).optional(),
   targetNodeKey: z.string().min(2).max(80).optional(),
   reason: z.string().trim().min(2).max(500),
   idempotencyKey: z.string().uuid(),

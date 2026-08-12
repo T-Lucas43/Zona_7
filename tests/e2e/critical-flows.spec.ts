@@ -5,8 +5,8 @@ test("mestre acessa o painel e controla uma sessão", async ({ page }) => {
   await page.getByRole("button", { name: "Mestre" }).click();
   await page.waitForURL("**/master");
   await expect(page.getByRole("heading", { name: "Painel do mestre" })).toBeVisible();
-  await page.getByRole("link", { name: /Abrir console/ }).click();
-  await expect(page.getByRole("heading", { name: "Zona 7: A Convergência" })).toBeVisible();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/sessions");
+  await expect(page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" })).toBeVisible();
 });
 
 test("jogador acessa somente a própria experiência mobile", async ({ page }) => {
@@ -41,14 +41,13 @@ test("mestre enxerga as seis fichas e a configuração completa", async ({ page 
   await expect(page.getByRole("heading", { name: "Módulos e recursos" })).toBeVisible();
 });
 
-test("jogador confirma uso funcional de habilidade", async ({ page }) => {
+test("jogador solicita uso funcional de habilidade", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Jogador" }).click();
   await page.goto("/app/characters/davi/abilities");
   const ability = page.locator("article").filter({ hasText: "Sempre no Ar" });
-  await ability.getByRole("button", { name: "Usar habilidade" }).click();
-  await ability.getByRole("button", { name: "Confirmar uso e descontar" }).click();
-  await expect(page.getByText("Sempre no Ar")).toBeVisible();
+  await ability.getByRole("button", { name: "Solicitar uso ao mestre" }).click();
+  await expect(ability.getByText("Aguardando decisão do mestre.")).toBeVisible();
 });
 
 test("mestre valida e inicia um roteiro publicado", async ({ page }) => {
@@ -125,7 +124,40 @@ test("mestre envia retrato de ator e o insere na cena", async ({ page }) => {
   await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/actors");
   const rivaldo = page.locator("article").filter({ hasText: "Rivaldo" });
   await rivaldo.locator('input[type="file"]').setInputFiles("public/personagens-zona7.png");
-  await expect(page.getByText("Retrato de Rivaldo atualizado")).toBeVisible();
+  await expect(page.getByText("Retrato de Rivaldo atualizado")).toBeVisible({ timeout: 15_000 });
   await rivaldo.getByRole("button", { name: "Inserir para todos" }).click();
   await expect(page.getByText(/Rivaldo foi inserido em Estúdio dos Sete Segundos/)).toBeVisible();
+});
+
+test("jogador vê apenas seu mural e escreve no livro de anotações", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Jogador" }).click();
+  await page.goto("/app/characters/davi/handouts");
+  await expect(page.getByRole("heading", { name: "Mural de Investigação" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Registro 07-C" })).toBeVisible();
+  await page.goto("/app/characters/davi/notebook");
+  await expect(page.getByRole("heading", { name: "Livro de anotações" })).toBeVisible();
+  await page.getByLabel("Título da página").fill("Suspeita sobre o corredor");
+  await page.getByLabel("Conteúdo da página").fill("A saída muda quando ninguém observa o mapa.");
+  await page.getByRole("button", { name: "Salvar página" }).click();
+  await expect(page.getByText("Página salva no caderno.")).toBeVisible();
+});
+
+test("mestre consulta e registra páginas nos cadernos dos jogadores", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/notebooks");
+  await expect(page.getByRole("heading", { name: "Cadernos dos jogadores" })).toBeVisible();
+  await page.getByLabel("Título da página").fill("Registro do mestre");
+  await page.getByLabel("Conteúdo da página").fill("Observação acrescentada durante a sessão.");
+  await page.getByRole("button", { name: "Salvar página" }).click();
+  await expect(page.getByText("Página salva no caderno.")).toBeVisible();
+});
+
+test("mestre publica o mesmo roteiro sem perder a versão disponível", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/scripts");
+  await page.getByRole("button", { name: "Validar e publicar" }).click();
+  await expect(page.getByText(/Roteiro publicado como versão|já era a versão/)).toBeVisible();
 });

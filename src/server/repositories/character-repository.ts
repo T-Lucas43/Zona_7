@@ -430,6 +430,111 @@ export async function getAuthorizedHandouts() {
   }));
 }
 
+export type PlayerNotebookPage = {
+  id: string;
+  pageNumber: number;
+  title: string;
+  content: string;
+  linkedHandoutIds: string[];
+  updatedAt: string;
+};
+
+export async function getPlayerNotebookPages(characterId: string): Promise<PlayerNotebookPage[]> {
+  if (!isSupabaseConfigured) {
+    return [{
+      id: "demo-notebook-page",
+      pageNumber: 1,
+      title: "Primeiras impressões",
+      content: "Anote aqui suas teorias, suspeitos e relações entre as pistas.",
+      linkedHandoutIds: ["registro"],
+      updatedAt: new Date().toISOString(),
+    }];
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("player_notebook_pages")
+    .select("id,page_number,title,content,linked_handout_ids,updated_at")
+    .eq("character_id", characterId)
+    .order("page_number");
+  if (error) throw new Error(`Falha ao carregar o caderno: ${error.message}`);
+  return data.map((page) => ({
+    id: page.id,
+    pageNumber: page.page_number,
+    title: page.title,
+    content: page.content,
+    linkedHandoutIds: page.linked_handout_ids ?? [],
+    updatedAt: page.updated_at,
+  }));
+}
+
+export async function getAuthorizedInvestigationBoard() {
+  const handouts = await getAuthorizedHandouts();
+  if (!isSupabaseConfigured) {
+    return {
+      items: handouts.map((item, index) => ({
+        ...item,
+        tipo: "pista",
+        estado: "descoberta",
+        visibilidade: "autorizada",
+        titulo: item.title,
+        resumo: item.excerpt,
+        conteudo: item.content,
+        board: {
+          x: 0.08 + (index % 3) * 0.29,
+          y: 0.1 + Math.floor(index / 3) * 0.32,
+          rotation: index % 2 ? 2.5 : -2.5,
+          zIndex: index + 1,
+          style: index % 2 ? "postit" as const : "paper" as const,
+        },
+      })),
+      connections: [],
+    };
+  }
+  const ids = handouts.map((item) => item.id);
+  if (ids.length === 0) return { items: [], connections: [] };
+  const supabase = await createClient();
+  const [positionsResult, connectionsResult] = await Promise.all([
+    supabase
+      .from("investigation_board_items")
+      .select("handout_id,x,y,rotation,z_index,display_style")
+      .in("handout_id", ids),
+    supabase
+      .from("investigation_board_connections")
+      .select("id,from_handout_id,to_handout_id")
+      .in("from_handout_id", ids)
+      .in("to_handout_id", ids),
+  ]);
+  if (positionsResult.error) throw new Error(`Falha ao carregar o mural: ${positionsResult.error.message}`);
+  if (connectionsResult.error) throw new Error(`Falha ao carregar conexões: ${connectionsResult.error.message}`);
+  const positions = new Map(positionsResult.data.map((item) => [item.handout_id, item]));
+  return {
+    items: handouts.map((item) => {
+      const position = positions.get(item.id);
+      return {
+        ...item,
+        tipo: "pista",
+        estado: "descoberta",
+        visibilidade: "autorizada",
+        titulo: item.title,
+        resumo: item.excerpt,
+        conteudo: item.content,
+        board: position ? {
+          x: Number(position.x),
+          y: Number(position.y),
+          rotation: Number(position.rotation),
+          zIndex: position.z_index,
+          style: position.display_style as "polaroid" | "postit" | "paper",
+        } : undefined,
+      };
+    }),
+    connections: connectionsResult.data.map((item) => ({
+      id: item.id,
+      fromHandoutId: item.from_handout_id,
+      toHandoutId: item.to_handout_id,
+    })),
+  };
+}
+
 export type PlayerNotification = {
   id: string;
   type: string;

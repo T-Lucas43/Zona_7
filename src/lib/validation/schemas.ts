@@ -22,11 +22,11 @@ export const resourceMutationSchema = z.object({
 
 export const diceRollSchema = z.object({
   formula: z.string().trim().min(2).max(80),
-  characterId: z.uuid().optional(),
-  sessionId: z.uuid().optional(),
+  characterId: z.string().min(1).max(100).optional(),
+  sessionId: z.string().min(1).max(100).optional(),
   purpose: z.string().trim().min(2).max(160),
   visibility: z.enum(["session", "player_master", "master", "hidden"]).default("session"),
-  requestId: z.uuid().optional(),
+  requestId: z.string().min(1).max(100).optional(),
 });
 
 export const messageSchema = z.object({

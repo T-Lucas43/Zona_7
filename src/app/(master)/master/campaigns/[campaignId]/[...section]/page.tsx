@@ -21,6 +21,7 @@ import { InvestigationBoard } from "@/components/master/investigation-board";
 import { MapStudio } from "@/components/master/map-studio";
 import { MessagingStudio } from "@/components/master/messaging-studio";
 import { MeterControl } from "@/components/master/meter-control";
+import { NotebookManager } from "@/components/master/notebook-manager";
 import { ResourceConsole } from "@/components/master/resource-console";
 import { SessionHub } from "@/components/master/session-hub";
 import { SessionItemManager } from "@/components/master/session-item-manager";
@@ -39,6 +40,7 @@ import {
 import {
   getAtores,
   getCenaPrincipal,
+  getCadernosDaCampanha,
   getContasDaCampanha,
   getEncontros,
   getEventosAuditoria,
@@ -218,6 +220,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     encounters: "Encontros",
     messages: "Mensagens",
     handouts: "Pistas e materiais",
+    notebooks: "Cadernos dos jogadores",
     rules: "Regras da campanha",
     audit: "Auditoria",
     settings: "Configurações",
@@ -229,16 +232,16 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
   };
   const title = titles[area] ?? "Console da campanha";
   const needsCharacters = area === "characters" || area === "members" || area === "messages";
-  const needsAccounts = area === "members" || area === "messages" || area === "characters";
+  const needsAccounts = area === "members" || area === "messages" || area === "characters" || area === "notebooks";
   const needsScene = area === "maps" || area === "collective" || area === "actors";
-  const mapSession = area === "maps" ? await getCurrentSession(campaignId) : null;
-  const [mapSceneState, mapCharacters] = mapSession
+  const sectionSession = area === "maps" || area === "scripts" ? await getCurrentSession(campaignId) : null;
+  const [mapSceneState, mapCharacters] = area === "maps" && sectionSession
     ? await Promise.all([
-        getSessionSceneState(mapSession.id),
-        getSessionCharacters(campaignId, mapSession.id),
+        getSessionSceneState(sectionSession.id),
+        getSessionCharacters(campaignId, sectionSession.id),
       ])
     : [{ enabled: true, sceneId: null }, []];
-  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, conexoesMural, itens, regras, auditoria] =
+  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, conexoesMural, itens, regras, auditoria, cadernos] =
     await Promise.all([
       getNomeCampanha(campaignId),
       needsCharacters ? getCampaignCharacters(campaignId) : Promise.resolve([]),
@@ -250,11 +253,12 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
       area === "scripts" ? getRoteiros(campaignId) : Promise.resolve([]),
       area === "encounters" ? getEncontros(campaignId) : Promise.resolve([]),
       area === "messages" ? getMensagensDaCampanha(campaignId) : Promise.resolve([]),
-      area === "handouts" ? getPistas(campaignId) : Promise.resolve([]),
+      area === "handouts" || area === "notebooks" ? getPistas(campaignId) : Promise.resolve([]),
       area === "handouts" ? getConexoesDoMural(campaignId) : Promise.resolve([]),
       area === "items" ? getItensDaCampanha(campaignId) : Promise.resolve([]),
       area === "rules" ? getRegras(campaignId) : Promise.resolve(null),
       area === "audit" ? getEventosAuditoria(campaignId) : Promise.resolve([]),
+      area === "notebooks" ? getCadernosDaCampanha(campaignId) : Promise.resolve([]),
     ]);
   return (
     <div>
@@ -303,6 +307,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         />
         <HandoutManager key={pistas.map((item) => item.id).join("|")} campaignId={campaignId} initialItems={pistas} />
       </>}
+      {area === "notebooks" && <NotebookManager campaignId={campaignId} accounts={contas} initialPages={cadernos} handouts={pistas} />}
       {area === "items" && <SessionItemManager campaignId={campaignId} initialItems={itens} />}
       {area === "rules" && (
         regras ? <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -352,7 +357,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
           allowedCharacterIds={mapCharacters.map((character) => character.id)}
         />
       </>}
-      {area === "scripts" && <ScriptStudio campaignId={campaignId} initialScripts={roteiros} />}
+      {area === "scripts" && <ScriptStudio campaignId={campaignId} initialScripts={roteiros} sessionId={sectionSession?.id} />}
     </div>
   );
 }

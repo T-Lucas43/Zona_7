@@ -14,6 +14,7 @@ import {
   Mail,
   Map,
   MessageSquare,
+  NotebookPen,
   Radio,
   ScrollText,
   Settings,
@@ -43,6 +44,7 @@ const getMasterLinks = (campaignId: string) =>
     [`/master/campaigns/${campaignId}/encounters`, "Encontros", Swords],
     [`/master/campaigns/${campaignId}/messages`, "Mensagens", MessageSquare],
     [`/master/campaigns/${campaignId}/handouts`, "Pistas", Archive],
+    [`/master/campaigns/${campaignId}/notebooks`, "Cadernos dos jogadores", NotebookPen],
     [`/master/campaigns/${campaignId}/items`, "Itens da sessão", PackageSearch],
     [`/master/campaigns/${campaignId}/maps`, "Mapas e tokens", Map],
     [`/master/campaigns/${campaignId}/actors`, "Entidades e NPCs", Sparkles],
@@ -59,10 +61,11 @@ const getPlayerLinks = (characterId: string, visibleSections: string[], sessionI
     [`/app/characters/${characterId}/abilities`, "Habilidades", Gauge],
     [`/app/characters/${characterId}/messages`, "Mensagens", Mail],
     [`/app/characters/${characterId}/handouts`, "Pistas", BookOpen],
+    [`/app/characters/${characterId}/notebook`, "Livro de anotações", NotebookPen],
     ...(sessionId ? [[`/app/session/${sessionId}`, "Sala ao vivo", Dices] as const] : []),
   ] as const).filter(([href]) => {
     const section = href.match(/\/characters\/[^/]+\/([^/]+)/)?.[1];
-    return !section || visibleSections.includes(section);
+    return !section || section === "notebook" || visibleSections.includes(section);
   });
 
 export function TerminalShell({

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { TerminalShell } from "@/components/layout/terminal-shell";
+import { SessionPresence } from "@/components/player/session-presence";
+import { LiveNotificationOverlay } from "@/components/player/live-notification-overlay";
 import { requireUser, roleCanAccess } from "@/lib/auth/session";
 import { getCharacterSheetVisibility } from "@/lib/character-visibility";
 import { getAuthorizedCharacters, getAuthorizedNotifications } from "@/server/repositories/character-repository";
@@ -20,6 +22,14 @@ export default async function PlayerLayout({ children }: { children: React.React
       playerNavigation={character ? { characterId: character.id, visibleSections: getCharacterSheetVisibility(character).sections, sessionId: session?.id } : undefined}
       notifications={notifications}
     >
+      {character?.campaignId && session && (
+        <SessionPresence
+          campaignId={character.campaignId}
+          sessionId={session.id}
+          characterId={character.id}
+        />
+      )}
+      <LiveNotificationOverlay notifications={notifications} />
       {children}
     </TerminalShell>
   );

@@ -72,7 +72,7 @@ export function SessionScriptControl({
 
   const canStart = sessionStatus === "active" && Boolean(selectedScript) && !run;
   return (
-    <section className="session-script-panel rounded-lg border border-[#6a2d36] p-5">
+    <section className="session-script-panel rounded-lg border border-[#6a2d36] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-lg bg-[#8a1b27]/25 text-[#ff7885]"><Route size={19} /></span>
@@ -84,7 +84,7 @@ export function SessionScriptControl({
         <span className="tag"><RadioTower size={12} /> {run ? statusLabels[run.status] ?? run.status : "Aguardando início"}</span>
       </div>
 
-      <div className="mt-4 rounded-lg border border-[#4c2a30] bg-black/20 p-3">
+      <div className={`mt-3 grid gap-3 rounded-lg border border-[#4c2a30] bg-black/20 p-3 ${!run ? "md:grid-cols-[minmax(0,1fr)_auto] md:items-end" : ""}`}>
         <label className="text-xs font-bold">
           Roteiro publicado disponível na Central
           <select className="field mt-1" value={selectedScript} onChange={(event) => setSelectedScript(event.target.value)}>
@@ -93,15 +93,13 @@ export function SessionScriptControl({
         </label>
         {run && scripts.length > 0 && <p className="mt-2 text-xs text-[#92959c]">A execução atual continua preservada. O roteiro selecionado fica pronto para a próxima execução.</p>}
         {scripts.length === 0 && <p className="mt-2 text-xs text-[#f0a5ad]">Publique um roteiro; ele aparecerá aqui automaticamente.</p>}
+        {!run && <button className="btn btn-primary" type="button" disabled={!canStart || pending} onClick={() => void control("start")}>
+          <Play size={15} /> Iniciar roteiro
+        </button>}
       </div>
 
       {!run ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button className="btn btn-primary" type="button" disabled={!canStart || pending} onClick={() => void control("start")}>
-            <Play size={15} /> Iniciar roteiro
-          </button>
-          {sessionStatus !== "active" && <p className="text-xs text-[#e2b341]">Inicie a sessão para liberar o roteiro ao mestre.</p>}
-        </div>
+        sessionStatus !== "active" ? <p className="mt-2 text-xs text-[#e2b341]">Inicie a sessão para liberar o roteiro ao mestre.</p> : null
       ) : (
         <div className="mt-4">
           <div className="rounded-lg border border-[#4c2a30] bg-black/25 p-4">

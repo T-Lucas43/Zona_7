@@ -31,10 +31,12 @@ export function InvestigationBoard({
   campaignId,
   initialItems,
   initialConnections,
+  readOnly = false,
 }: {
-  campaignId: string;
+  campaignId?: string;
   initialItems: PistaDaCampanha[];
   initialConnections: ConexaoDoMural[];
+  readOnly?: boolean;
 }) {
   const [items, setItems] = useState<BoardItem[]>(() => initialItems.map((item, index) => ({ ...item, board: item.board ?? defaultBoard(item, index) })));
   const [connections, setConnections] = useState(initialConnections);
@@ -46,6 +48,7 @@ export function InvestigationBoard({
 
   function beginDrag(event: React.PointerEvent<HTMLButtonElement>, item: BoardItem) {
     event.stopPropagation();
+    if (readOnly) return;
     if (connectionMode) {
       void chooseConnection(item.id);
       return;
@@ -74,6 +77,7 @@ export function InvestigationBoard({
     const item = items.find((value) => value.id === dragging.id);
     setDragging(null);
     if (!item) return;
+    if (!campaignId) return;
     const response = await fetch("/api/master/investigation-board", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "move", campaignId, handoutId: item.id, ...item.board }),
@@ -83,6 +87,7 @@ export function InvestigationBoard({
   }
 
   async function chooseConnection(targetId: string) {
+    if (!campaignId || readOnly) return;
     if (!connectionSource) {
       setConnectionSource(targetId);
       setNotice("Agora escolha a segunda pista.");
@@ -118,7 +123,7 @@ export function InvestigationBoard({
   return <section className="mt-6">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
       <div><p className="eyebrow">arquivo visual interativo</p><h2 className="text-xl font-black">Mural de Investigação</h2></div>
-      <button className={`btn ${connectionMode ? "btn-primary" : ""}`} type="button" onClick={toggleConnectionMode}>{connectionMode ? <Link2Off size={15} /> : <Link2 size={15} />}{connectionMode ? "Encerrar conexões" : "Conectar pistas"}</button>
+      {!readOnly && <button className={`btn ${connectionMode ? "btn-primary" : ""}`} type="button" onClick={toggleConnectionMode}>{connectionMode ? <Link2Off size={15} /> : <Link2 size={15} />}{connectionMode ? "Encerrar conexões" : "Conectar pistas"}</button>}
     </div>
     <div className="investigation-board" ref={boardRef}>
       <svg className="investigation-threads" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -132,7 +137,7 @@ export function InvestigationBoard({
       {items.map((item) => <button
         type="button"
         key={item.id}
-        className={`investigation-clue investigation-clue-${item.board.style} ${connectionSource === item.id ? "investigation-clue-source" : ""}`}
+        className={`investigation-clue investigation-clue-${item.board.style} ${connectionSource === item.id ? "investigation-clue-source" : ""} ${readOnly ? "cursor-default" : ""}`}
         style={{ left: `${item.board.x * 100}%`, top: `${item.board.y * 100}%`, zIndex: item.board.zIndex, transform: `rotate(${item.board.rotation}deg)` }}
         onPointerDown={(event) => beginDrag(event, item)}
         onPointerMove={drag}
@@ -144,9 +149,9 @@ export function InvestigationBoard({
         <strong>{item.titulo}</strong>
         <span>{item.resumo || item.conteudo || "Pista sem descrição."}</span>
       </button>)}
-      {items.length === 0 && <div className="absolute inset-0 grid place-items-center text-sm text-[#efe2c3]">Cadastre pistas para montar o mural.</div>}
+      {items.length === 0 && <div className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-[#efe2c3]">{readOnly ? "Você ainda não recebeu nenhuma pista para o mural." : "Cadastre pistas para montar o mural."}</div>}
     </div>
-    <p className="mt-3 text-xs text-[#858890]">Arraste livremente. A pista selecionada vem para frente. No modo de conexão, escolha duas pistas para criar ou remover o fio.</p>
+    <p className="mt-3 text-xs text-[#858890]">{readOnly ? "Este mural mostra somente as pistas entregues a você ou a todo o grupo. Conexões secretas permanecem ocultas." : "Arraste livremente. A pista selecionada vem para frente. No modo de conexão, escolha duas pistas para criar ou remover o fio."}</p>
     {notice && <p className="mt-2 text-xs text-[#7bd5a5]" role="status">{notice}</p>}
   </section>;
 }

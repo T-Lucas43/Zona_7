@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/config";
 import { createClient } from "@/lib/supabase/client";
 
-const liveTables = ["characters", "character_attributes", "character_resources", "character_items", "character_abilities", "character_sheet_settings", "message_recipients", "handouts", "handout_access", "items", "investigation_board_items", "investigation_board_connections", "media_assets", "game_scenes", "actors", "scene_tokens", "scene_token_connections", "sessions", "session_participants", "live_sessions", "live_session_events", "script_run_events", "session_public_state", "script_packages", "script_versions", "roll_requests", "dice_rolls", "encounters"] as const;
+const liveTables = ["characters", "character_attributes", "character_resources", "character_items", "character_abilities", "character_sheet_settings", "message_recipients", "handouts", "handout_access", "items", "investigation_board_items", "investigation_board_connections", "player_notebook_pages", "media_assets", "game_scenes", "actors", "scene_tokens", "scene_token_connections", "sessions", "session_participants", "live_sessions", "live_session_events", "script_run_events", "session_public_state", "script_packages", "script_versions", "roll_requests", "dice_rolls", "encounters"] as const;
 
 export function LiveSync({ campaignId, fallbackIntervalMs = 5_000 }: { campaignId?: string; fallbackIntervalMs?: number }) {
   const router = useRouter();

@@ -26,27 +26,68 @@ export async function POST(request: Request) {
       );
     const supabase = await createClient();
     const slug = parsed.document.id.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
-    const { data: pacote, error: pacoteError } = await supabase
+    const { data: existingPackage, error: packageLookupError } = await supabase
       .from("script_packages")
-      .upsert(
-        {
+      .select("id")
+      .eq("campaign_id", input.campaignId)
+      .eq("slug", slug)
+      .maybeSingle();
+    if (packageLookupError) throw new Error(packageLookupError.message);
+    let pacote = existingPackage;
+    if (!pacote) {
+      const { data, error } = await supabase
+        .from("script_packages")
+        .insert({
           campaign_id: input.campaignId,
           name: parsed.document.title,
           slug,
           state: "draft",
           created_by: user.id,
-        },
-        { onConflict: "campaign_id,slug" },
-      )
-      .select("id")
-      .single();
-    if (pacoteError) throw new Error(pacoteError.message);
-    const { count } = await supabase
-      .from("script_versions")
-      .select("id", { count: "exact", head: true })
-      .eq("script_package_id", pacote.id);
-    const version = (count ?? 0) + 1;
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      pacote = data;
+    }
     const hash = createHash("sha256").update(input.source).digest("hex");
+    const { data: existingVersion, error: versionLookupError } = await supabase
+      .from("script_versions")
+      .select("id,version_number")
+      .eq("script_package_id", pacote.id)
+      .eq("source_hash", hash)
+      .maybeSingle();
+    if (versionLookupError) throw new Error(versionLookupError.message);
+    if (existingVersion) {
+      const { error: versionPublishError } = await supabase
+        .from("script_versions")
+        .update({ state: "published", published_at: new Date().toISOString() })
+        .eq("id", existingVersion.id);
+      if (versionPublishError) throw new Error(versionPublishError.message);
+      const { error: packagePublishError } = await supabase
+        .from("script_packages")
+        .update({
+          name: parsed.document.title,
+          current_version_id: existingVersion.id,
+          state: "published",
+        })
+        .eq("id", pacote.id);
+      if (packagePublishError) throw new Error(packagePublishError.message);
+      return NextResponse.json({
+        id: pacote.id,
+        version: existingVersion.version_number,
+        title: parsed.document.title,
+        reused: true,
+      });
+    }
+    const { data: latestVersion, error: latestVersionError } = await supabase
+      .from("script_versions")
+      .select("version_number")
+      .eq("script_package_id", pacote.id)
+      .order("version_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (latestVersionError) throw new Error(latestVersionError.message);
+    const version = (latestVersion?.version_number ?? 0) + 1;
     const { data: versao, error: versaoError } = await supabase
       .from("script_versions")
       .insert({
@@ -98,11 +139,12 @@ export async function POST(request: Request) {
       });
       if (error) throw new Error(error.message);
     }
-    await supabase
+    const { error: packagePublishError } = await supabase
       .from("script_packages")
-      .update({ current_version_id: versao.id, state: "published" })
+      .update({ name: parsed.document.title, current_version_id: versao.id, state: "published" })
       .eq("id", pacote.id);
-    return NextResponse.json({ id: pacote.id, version }, { status: 201 });
+    if (packagePublishError) throw new Error(packagePublishError.message);
+    return NextResponse.json({ id: pacote.id, version, title: parsed.document.title }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha ao publicar roteiro." },

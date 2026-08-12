@@ -8,12 +8,10 @@ import { SessionClock } from "@/components/master/session-clock";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
-import { LiveNotificationOverlay } from "@/components/player/live-notification-overlay";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
-import { SessionPresence } from "@/components/player/session-presence";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
 import {
-  getAuthorizedCharacters, getAuthorizedMessages, getAuthorizedNotifications, getCharacterAbilities,
+  getAuthorizedCharacters, getAuthorizedMessages, getCharacterAbilities,
   getCharacterInventory, getSessionAbilityRequests, getSessionDiceRolls,
 } from "@/server/repositories/character-repository";
 import { getCenaPrincipal, getSessionSceneState } from "@/server/repositories/master-repository";
@@ -28,19 +26,17 @@ export default async function PlayerSessionPage({ params }: { params: Promise<{ 
   const [characters, sceneState] = await Promise.all([getAuthorizedCharacters(), getSessionSceneState(session.id)]);
   const character = characters[0];
   if (!character) return <section className="panel rounded-lg p-5"><h1 className="text-2xl font-black">Ficha não vinculada</h1></section>;
-  const [publicState, cast, scene, authorizedMessages, initiative, abilities, inventory, notifications, requests, rolls] = await Promise.all([
+  const [publicState, cast, scene, authorizedMessages, initiative, abilities, inventory, requests, rolls] = await Promise.all([
     getSessionPublicState(campaignId, session.id), getSessionCast(campaignId, session.id),
     getCenaPrincipal(campaignId, sceneState.sceneId), getAuthorizedMessages(), getSessionInitiative(session.id),
-    getCharacterAbilities(character.id), getCharacterInventory(character.id), getAuthorizedNotifications(),
+    getCharacterAbilities(character.id), getCharacterInventory(character.id),
     getSessionAbilityRequests(session.id), getSessionDiceRolls(session.id),
   ]);
   const disabled = ["dying", "dead"].includes(character.characterState ?? "");
   const targets = cast.flatMap((member) => member.characterId && member.characterId !== character.id ? [{ id: member.characterId, name: member.name }] : []);
   const visibleEntities = scene.tokens.filter((token) => token.actorType !== "player_character" && token.visivel);
   return <div>
-    <SessionPresence campaignId={campaignId} sessionId={session.id} characterId={character.id} />
     <LiveSync campaignId={campaignId} />
-    <LiveNotificationOverlay notifications={notifications} />
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">sala ao vivo // rodada {session.round}</p><h1 className="mt-1 text-3xl font-black">{publicState.sceneTitle || session.scene}</h1></div><RealtimeIndicator channel={`session:${session.id}`} /></div>
     {character.characterState === "dying" && <section className="mt-5 rounded-xl border border-[#a46d2b] bg-[#7a4516]/20 p-6 text-center"><h2 className="text-3xl font-black text-[#f0bd72]">Você está quase morto</h2><p className="mt-2 text-sm text-[#d7b98e]">Seu PV chegou a zero. Você está sem ações até a decisão do mestre.</p></section>}
     {character.characterState === "dead" && <section className="mt-5 rounded-xl border border-[#a72e3b] bg-[#711722]/25 p-6 text-center"><Skull className="mx-auto text-[#ff6977]" size={36} /><h2 className="mt-3 text-3xl font-black text-[#ff7b88]">Você morreu</h2><p className="mt-2 text-sm text-[#d7a4a9]">O mestre declarou a morte do personagem. Seu token está marcado no mapa.</p></section>}
