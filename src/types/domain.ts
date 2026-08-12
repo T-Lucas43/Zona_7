@@ -19,6 +19,7 @@ export interface CharacterSheetVisibility {
 
 export interface CharacterSummary {
   id: string;
+  campaignId?: string;
   name: string;
   codename?: string;
   origin: string;
@@ -57,6 +58,7 @@ export interface AbilitySummary {
 
 export interface SessionSummary {
   id: string;
+  campaignId?: string;
   title: string;
   status: "draft" | "scheduled" | "open" | "active" | "paused" | "ended" | "archived";
   scene: string;
@@ -64,6 +66,8 @@ export interface SessionSummary {
   currentTurn: string;
   connected: number;
   pressure: number;
+  elapsedSeconds?: number;
+  timerStartedAt?: string | null;
 }
 
 export interface AuthenticatedUser {

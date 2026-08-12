@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+import { getCurrentUser } from "@/lib/auth/session";
 import { isSupabaseConfigured } from "@/lib/config";
 import { characters as demoCharacters } from "@/lib/demo-data";
 import { abilities as demoAbilities, messages as demoMessages } from "@/lib/demo-data";
@@ -8,6 +10,7 @@ import type { AbilitySummary, CharacterSummary, ResourceKind } from "@/types/dom
 
 type CharacterRow = {
   id: string;
+  campaign_id?: string;
   name: string;
   codename: string | null;
   origin: string | null;
@@ -55,6 +58,7 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
   const meter = row.character_meter_values[0];
   return {
     id: row.id,
+    campaignId: row.campaign_id,
     name: row.name,
     codename: row.codename ?? undefined,
     origin: row.origin ?? "Não informada",
@@ -96,7 +100,7 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
 }
 
 const select = `
-  id,name,codename,origin,class_name,path_name,narrative_status,team_role,nex,defense,movement,main_dc,version,portrait_path,
+  id,campaign_id,name,codename,origin,class_name,path_name,narrative_status,team_role,nex,defense,movement,main_dc,version,portrait_path,
   character_attributes(agility,strength,intellect,presence,vigor),
   character_resources(resource,current_value,maximum_value),
   character_meter_values(current_value,custom_meter_definitions(name,stages)),
@@ -132,28 +136,54 @@ export async function getCampaignCharacters(campaignId: string) {
   return mapCharactersWithPortraits(supabase, data as unknown as CharacterRow[]);
 }
 
-export async function getAuthorizedCharacters() {
+export async function getSessionCharacters(campaignId: string, sessionId: string) {
   if (!isSupabaseConfigured) return demoCharacters;
   const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return [];
+  const { data: participants, error: participantError } = await supabase
+    .from("session_participants")
+    .select("character_id")
+    .eq("campaign_id", campaignId)
+    .eq("session_id", sessionId)
+    .not("character_id", "is", null);
+  if (participantError)
+    throw new Error(`Falha ao carregar participantes da sessão: ${participantError.message}`);
+  const characterIds = [...new Set(participants.flatMap((item) => item.character_id ? [item.character_id] : []))];
+  if (characterIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("characters")
+    .select(select)
+    .eq("campaign_id", campaignId)
+    .in("id", characterIds)
+    .is("deleted_at", null)
+    .order("name");
+  if (error) throw new Error(`Falha ao carregar personagens da sessão: ${error.message}`);
+  return mapCharactersWithPortraits(supabase, data as unknown as CharacterRow[]);
+}
+
+async function loadAuthorizedCharacters() {
+  if (!isSupabaseConfigured) return demoCharacters;
+  const supabase = await createClient();
+  const user = await getCurrentUser("player");
+  if (!user) return [];
   const { data: owners, error: ownerError } = await supabase
     .from("character_owners")
-    .select("character_id")
-    .eq("user_id", userData.user.id)
+    .select("character_id,campaign_id")
+    .eq("user_id", user.id)
     .not("confirmed_at", "is", null);
   if (ownerError) throw new Error(`Falha ao localizar fichas vinculadas: ${ownerError.message}`);
   const rows = await Promise.all(
-    owners.map(async ({ character_id }) => {
+    owners.map(async ({ character_id, campaign_id }) => {
       const { data, error } = await supabase.rpc("get_player_character_sheet", {
         p_character_id: character_id,
       });
       if (error) throw new Error(`Falha ao carregar ficha autorizada: ${error.message}`);
-      return data as unknown as CharacterRow;
+      return { ...(data as unknown as CharacterRow), campaign_id };
     }),
   );
   return mapCharactersWithPortraits(supabase, rows);
 }
+
+export const getAuthorizedCharacters = cache(loadAuthorizedCharacters);
 
 export async function getAuthorizedCharacter(characterId: string) {
   if (!isSupabaseConfigured) {
@@ -770,11 +800,15 @@ const demoWeaknesses: Record<
 };
 
 export async function getCharacterSkills(characterId: string) {
-  if (!isSupabaseConfigured) return demoSkills[characterId] ?? demoSkills.davi ?? [];
+  if (!isSupabaseConfigured)
+    return (demoSkills[characterId] ?? demoSkills.davi ?? []).map((skill) => ({
+      ...skill,
+      notes: "",
+    }));
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("character_skills")
-    .select("id,name,related_attribute,bonus,training_degree")
+    .select("id,name,related_attribute,bonus,training_degree,notes")
     .eq("character_id", characterId)
     .eq("is_active", true)
     .is("deleted_at", null)
@@ -786,15 +820,20 @@ export async function getCharacterSkills(characterId: string) {
     attribute: (skill.related_attribute ?? "").toUpperCase(),
     bonus: skill.bonus,
     training: skill.training_degree,
+    notes: skill.notes ?? "",
   }));
 }
 
 export async function getCharacterActions(characterId: string) {
-  if (!isSupabaseConfigured) return demoActions[characterId] ?? demoActions.davi ?? [];
+  if (!isSupabaseConfigured)
+    return (demoActions[characterId] ?? demoActions.davi ?? []).map((action) => ({
+      ...action,
+      description: "",
+    }));
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attacks")
-    .select("id,name,attack_formula,damage_formula,range_text,damage_type")
+    .select("id,name,attack_formula,damage_formula,range_text,damage_type,description")
     .eq("character_id", characterId)
     .eq("is_active", true)
     .is("deleted_at", null)
@@ -807,6 +846,7 @@ export async function getCharacterActions(characterId: string) {
     damage: action.damage_formula,
     range: action.range_text ?? "—",
     type: action.damage_type ?? "—",
+    description: action.description ?? "",
   }));
 }
 
@@ -827,4 +867,30 @@ export async function getCharacterWeaknesses(characterId: string) {
     effect: weakness.mechanical_effect,
     active: weakness.is_active,
   }));
+}
+
+export type SessionCharacterDetails = {
+  characterId: string;
+  inventory: Awaited<ReturnType<typeof getCharacterInventory>>;
+  abilities: Awaited<ReturnType<typeof getCharacterAbilities>>;
+  skills: Awaited<ReturnType<typeof getCharacterSkills>>;
+  actions: Awaited<ReturnType<typeof getCharacterActions>>;
+  weaknesses: Awaited<ReturnType<typeof getCharacterWeaknesses>>;
+};
+
+export async function getSessionCharacterDetails(
+  characterIds: string[],
+): Promise<SessionCharacterDetails[]> {
+  return Promise.all(
+    characterIds.map(async (characterId) => {
+      const [inventory, abilities, skills, actions, weaknesses] = await Promise.all([
+        getCharacterInventory(characterId),
+        getCharacterAbilities(characterId),
+        getCharacterSkills(characterId),
+        getCharacterActions(characterId),
+        getCharacterWeaknesses(characterId),
+      ]);
+      return { characterId, inventory, abilities, skills, actions, weaknesses };
+    }),
+  );
 }

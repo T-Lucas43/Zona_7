@@ -78,6 +78,10 @@ export type ScriptIssue = {
   nodeId?: string;
 };
 
+// A fórmula pode ser uma rolagem fixa (ex.: 2d20+5) ou uma referência que
+// será resolvida com os valores atuais da ficha quando o nó for executado.
+const dynamicFormulas = new Set(["character_skill", "character_attribute"]);
+
 const forbiddenKeys = /^(script|code|javascript|executable|shell|sql|command)$/i;
 const forbiddenText =
   /<script|javascript:|\beval\s*\(|\bfunction\s*\(|\bimport\s*\(|\brequire\s*\(|https?:\/\//i;
@@ -198,6 +202,7 @@ export function validateZona7Script(document: Zona7Script) {
     for (const key of ["formula", "attack_formula", "damage_formula"] as const) {
       const formula = node[key];
       if (typeof formula === "string") {
+        if (dynamicFormulas.has(formula.trim().toLowerCase())) continue;
         try {
           parseDiceFormula(formula);
         } catch {

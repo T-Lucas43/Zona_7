@@ -86,11 +86,16 @@ export default async function CharacterSectionPage({
                 <h2 className="mt-4 text-lg font-extrabold">
                   {ability.state === "sealed" ? "█ ████ ███████" : ability.name}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-[#91949b]">
-                  {ability.state === "sealed"
-                    ? "A cicatriz ainda não despertou."
-                    : ability.description}
-                </p>
+                <div className="mt-3 rounded border border-[#30333a] bg-black/25 p-3">
+                  <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
+                    Informações da habilidade
+                  </span>
+                  <p className="mt-2 text-sm leading-6 text-[#91949b]">
+                    {ability.state === "sealed"
+                      ? "A cicatriz ainda não despertou."
+                      : ability.description}
+                  </p>
+                </div>
                 <div className="mt-4 flex gap-2">
                   {Object.entries(ability.costs).map(([key, value]) => (
                     <span className="tag" key={key}>
@@ -112,7 +117,10 @@ export default async function CharacterSectionPage({
           {weaknesses.map((weakness) => (
             <article className="rounded-lg border border-[#663039] bg-[#6f1722]/10 p-4" key={weakness.id}>
               <div className="flex justify-between gap-2"><strong>{weakness.name}</strong>{weakness.active && <span className="tag">Ativa</span>}</div>
-              <p className="mt-2 text-sm text-[#a4a6ac]">{weakness.effect}</p>
+              <div className="mt-3 rounded border border-[#663039] bg-black/20 p-3">
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <p className="mt-2 text-sm text-[#a4a6ac]">{weakness.effect}</p>
+              </div>
             </article>
           ))}
         </div>
@@ -128,6 +136,12 @@ export default async function CharacterSectionPage({
               <p className="mt-2 text-xs text-[#777a82]">
                 {skill.attribute} · {skill.training}
               </p>
+              <div className="mt-3 rounded border border-[#30333a] bg-black/20 p-3">
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <p className="mt-2 text-xs leading-5 text-[#92959c]">
+                  {skill.notes?.trim() || "Nenhuma informação adicional disponibilizada."}
+                </p>
+              </div>
             </article>
           ))}
         </div>
@@ -151,6 +165,12 @@ export default async function CharacterSectionPage({
                 </p>
               </div>
               <p className="mt-3 text-xs text-[#8f9299]">Alcance: {action.range}</p>
+              <div className="mt-3 rounded border border-[#30333a] bg-black/20 p-3">
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <p className="mt-2 text-xs leading-5 text-[#92959c]">
+                  {action.description?.trim() || "Nenhuma informação adicional disponibilizada."}
+                </p>
+              </div>
             </article>
           ))}
         </div>

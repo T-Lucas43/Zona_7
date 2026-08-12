@@ -11,8 +11,9 @@ import {
 import { CharacterCard } from "@/components/character/character-card";
 import { ResourceConsole } from "@/components/master/resource-console";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
-import { campaign, liveSession } from "@/lib/demo-data";
 import { getCampaignCharacters } from "@/server/repositories/character-repository";
+import { getCampanhaResumo } from "@/server/repositories/master-repository";
+import { notFound } from "next/navigation";
 
 export default async function MasterCampaignPage({
   params,
@@ -20,7 +21,11 @@ export default async function MasterCampaignPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = await params;
-  const characters = await getCampaignCharacters(campaignId);
+  const [characters, campaign] = await Promise.all([
+    getCampaignCharacters(campaignId),
+    getCampanhaResumo(campaignId),
+  ]);
+  if (!campaign) notFound();
   const actions = [
     ["members", "Membros", Users],
     ["sessions", "Sessões", CalendarDays],
@@ -32,8 +37,8 @@ export default async function MasterCampaignPage({
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">campanha // convergência</p>
-          <h1 className="mt-1 text-3xl font-black">{campaign.name}</h1>
+          <p className="eyebrow">campanha // console</p>
+          <h1 className="mt-1 text-3xl font-black">{campaign.nome}</h1>
         </div>
         <RealtimeIndicator channel={`campaign:${campaignId}`} />
       </div>
@@ -50,22 +55,32 @@ export default async function MasterCampaignPage({
       </div>
       <section className="mt-5 grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="panel rounded-xl border-[#59232b] p-5 sm:p-6">
-          <div className="flex items-center justify-between">
-            <span className="tag border-[#66313a] text-[#ed8f99]">
-              <Radio size={12} /> SESSÃO EM ANDAMENTO
-            </span>
-            <span className="font-mono text-xs">PRESSÃO {liveSession.pressure}/7</span>
-          </div>
-          <h2 className="mt-5 text-2xl font-black">{liveSession.scene}</h2>
-          <p className="mt-2 text-sm text-[#92959c]">
-            Rodada {liveSession.round} · turno de {liveSession.currentTurn}
-          </p>
-          <Link
-            className="btn btn-primary mt-5"
-            href={`/master/campaigns/${campaignId}/sessions/${liveSession.id}`}
-          >
-            Abrir painel ao vivo <ArrowRight size={15} />
-          </Link>
+          {campaign.sessao ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="tag border-[#66313a] text-[#ed8f99]">
+                  <Radio size={12} /> {campaign.sessao.estado.toUpperCase()}
+                </span>
+                <span className="font-mono text-xs">PRESSÃO {campaign.pressao}/7</span>
+              </div>
+              <h2 className="mt-5 text-2xl font-black">{campaign.sessao.cena}</h2>
+              <p className="mt-2 text-sm text-[#92959c]">{campaign.sessao.titulo}</p>
+              <Link
+                className="btn btn-primary mt-5"
+                href={`/master/campaigns/${campaignId}/sessions/${campaign.sessao.id}`}
+              >
+                Abrir painel ao vivo <ArrowRight size={15} />
+              </Link>
+            </>
+          ) : (
+            <>
+              <span className="tag">SEM SESSÃO</span>
+              <h2 className="mt-5 text-xl font-black">Nenhuma sessão cadastrada</h2>
+              <p className="mt-2 text-sm text-[#92959c]">
+                A central ao vivo aparecerá aqui depois que uma sessão for criada.
+              </p>
+            </>
+          )}
         </div>
         <ResourceConsole initialCharacters={characters} />
       </section>

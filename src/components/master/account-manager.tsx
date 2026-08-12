@@ -91,6 +91,7 @@ export function AccountManager({
         situacao: "Convite pendente",
         ultimoAcesso: null,
         personagem: null,
+        personagemId: null,
       },
     ]);
     setNome("");
@@ -126,6 +127,7 @@ export function AccountManager({
       situacao: "Ativo",
       ultimoAcesso: null,
       personagem: result.characterName ?? personagem?.name ?? null,
+      personagemId: papel === "player" ? personagemId || null : null,
     }]);
     setAssignments((current) => ({ ...current, [newMemberId]: papel === "player" ? personagemId : "" }));
     setAviso(`Conta de ${nome} criada${personagem ? ` e vinculada a ${personagem.name}` : ""}. A senha temporária deve ser alterada no primeiro acesso.`);

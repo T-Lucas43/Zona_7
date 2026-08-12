@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/config";
@@ -21,7 +22,7 @@ const demoProfiles: Record<"master" | "player", AuthenticatedUser> = {
   },
 };
 
-export async function getCurrentUser(
+async function loadCurrentUser(
   preferredDemoRole?: "master" | "player",
 ): Promise<AuthenticatedUser | null> {
   if (!isSupabaseConfigured) {
@@ -32,20 +33,22 @@ export async function getCurrentUser(
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
+  const { data: claimsData, error } = await supabase.auth.getClaims();
+  const userId = claimsData?.claims.sub;
+  if (error || !userId) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name,platform_admin")
-    .eq("id", data.user.id)
-    .maybeSingle();
-
-  const { data: memberships } = await supabase
-    .from("campaign_members")
-    .select("role")
-    .eq("user_id", data.user.id)
-    .eq("status", "active");
+  const [{ data: profile }, { data: memberships }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("display_name,platform_admin")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabase
+      .from("campaign_members")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("status", "active"),
+  ]);
   const roleOrder: CampaignRole[] = [
     "campaign_owner",
     "game_master",
@@ -57,13 +60,21 @@ export async function getCurrentUser(
   const campaignRole = roleOrder.find((role) => membershipRoles.has(role)) ?? "player";
 
   return {
-    id: data.user.id,
-    email: data.user.email ?? "",
-    displayName: profile?.display_name ?? data.user.email?.split("@")[0] ?? "Operador",
+    id: userId,
+    email: typeof claimsData.claims.email === "string" ? claimsData.claims.email : "",
+    displayName:
+      profile?.display_name ??
+      (typeof claimsData.claims.email === "string"
+        ? claimsData.claims.email.split("@")[0]
+        : "Operador"),
     role: profile?.platform_admin ? "platform_admin" : campaignRole,
     demo: false,
   };
 }
+
+// Layouts and pages often ask for the same user during one render. React.cache
+// prevents repeating authentication, profile and membership network requests.
+export const getCurrentUser = cache(loadCurrentUser);
 
 export async function requireUser(returnTo: string, preferredDemoRole?: "master" | "player") {
   const user = await getCurrentUser(preferredDemoRole);

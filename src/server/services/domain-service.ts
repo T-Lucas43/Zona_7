@@ -316,6 +316,44 @@ export async function advanceTurn(encounterId: string) {
   return data;
 }
 
+export async function advanceSessionTurnSynced(input: {
+  campaignId: string;
+  sessionId: string;
+  actorUserId: string;
+  idempotencyKey: string;
+}) {
+  const supabase = await clientOrDemo();
+  if (!supabase) return { ...demoResult("turn_advanced"), round: 0 };
+  const { data, error } = await supabase.rpc("advance_encounter_turn_synced", {
+    p_campaign_id: input.campaignId,
+    p_session_id: input.sessionId,
+    p_actor_user_id: input.actorUserId,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function controlSessionRuntime(input: {
+  campaignId: string;
+  sessionId: string;
+  actorUserId: string;
+  action: "start" | "pause" | "resume" | "end";
+  idempotencyKey: string;
+}) {
+  const supabase = await clientOrDemo();
+  if (!supabase) return { ...demoResult(`session_${input.action}`), status: input.action };
+  const { data, error } = await supabase.rpc("control_session_runtime", {
+    p_campaign_id: input.campaignId,
+    p_session_id: input.sessionId,
+    p_actor_user_id: input.actorUserId,
+    p_action: input.action,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 export async function requestRoll(input: Record<string, unknown>) {
   const supabase = await clientOrDemo();
   if (!supabase) return demoResult("roll_requested");

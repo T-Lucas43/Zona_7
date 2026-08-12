@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminConfigured, isSupabaseConfigured } from "@/lib/config";
 import { characters } from "@/lib/demo-data";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -58,6 +59,7 @@ export type ContaDaCampanha = {
   situacao: string;
   ultimoAcesso: string | null;
   personagem: string | null;
+  personagemId: string | null;
 };
 
 export type CampoPersonalizado = {
@@ -122,6 +124,304 @@ export type RoteiroDaCampanha = {
   versao: number;
 };
 
+export type CampanhaResumo = {
+  id: string;
+  nome: string;
+  premissa: string;
+  situacao: string;
+  personagens: number;
+  conectados: number;
+  pressao: number;
+  sessao: {
+    id: string;
+    titulo: string;
+    estado: string;
+    cena: string;
+  } | null;
+};
+
+export type EncontroDaCampanha = {
+  id: string;
+  nome: string;
+  estado: string;
+  rodada: number;
+  participantes: number;
+  observacoes: string;
+};
+
+export type MensagemDaCampanha = {
+  id: string;
+  remetente: string;
+  corpo: string;
+  estado: string;
+  destinatarios: number;
+  criadoEm: string;
+};
+
+export type PistaDaCampanha = {
+  id: string;
+  titulo: string;
+  tipo: string;
+  estado: string;
+  visibilidade: string;
+  resumo: string;
+  conteudo: string;
+};
+
+export type EventoAuditoria = {
+  id: string;
+  tipo: string;
+  entidade: string;
+  criadoEm: string;
+  detalhes: Record<string, unknown>;
+};
+
+export type RegrasDaCampanha = {
+  perfil: string;
+  descricao: string;
+  sistema: string;
+  zeroPv: string;
+  zeroSan: string;
+  pressao: number;
+};
+
+export type PerfilDeRegras = { id: string; codigo: string; nome: string; descricao: string };
+
+const campaignStatusLabels: Record<string, string> = {
+  draft: "Rascunho",
+  active: "Ativa",
+  paused: "Pausada",
+  archived: "Arquivada",
+};
+
+type CampaignOverviewRow = {
+  id: string;
+  name: string;
+  public_premise: string | null;
+  status: string;
+  characters: Array<{ id: string }>;
+  campaign_rule_settings: { pressure: number } | null;
+  sessions: Array<{
+    id: string;
+    title: string;
+    status: string;
+    updated_at: string;
+    session_participants: Array<{ status: string }>;
+    session_scenes: { title: string } | null;
+  }>;
+};
+
+function mapCampaignOverview(row: CampaignOverviewRow): CampanhaResumo {
+  const sessions = [...(row.sessions ?? [])].sort((a, b) =>
+    b.updated_at.localeCompare(a.updated_at),
+  );
+  const current = sessions.find((session) => !["ended", "archived"].includes(session.status)) ?? sessions[0];
+  return {
+    id: row.id,
+    nome: row.name,
+    premissa: row.public_premise ?? "",
+    situacao: campaignStatusLabels[row.status] ?? row.status,
+    personagens: row.characters?.length ?? 0,
+    conectados:
+      current?.session_participants?.filter((participant) => participant.status === "online").length ?? 0,
+    pressao: row.campaign_rule_settings?.pressure ?? 0,
+    sessao: current
+      ? {
+          id: current.id,
+          titulo: current.title,
+          estado: current.status,
+          cena: current.session_scenes?.title ?? current.title,
+        }
+      : null,
+  };
+}
+
+const campaignOverviewSelect = `
+  id,name,public_premise,status,
+  characters(id),
+  campaign_rule_settings(pressure),
+  sessions(id,title,status,updated_at,session_participants(status),session_scenes!sessions_current_scene_fk(title))
+`;
+
+export async function getCampanhasDoMestre(): Promise<CampanhaResumo[]> {
+  if (!isSupabaseConfigured) return [];
+  const user = await getCurrentUser("master");
+  if (!user) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select(`${campaignOverviewSelect},campaign_members!inner(user_id,role,status)`)
+    .eq("campaign_members.user_id", user.id)
+    .eq("campaign_members.status", "active")
+    .in("campaign_members.role", ["campaign_owner", "game_master", "co_master"])
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`Falha ao carregar campanhas: ${error.message}`);
+  return (data as unknown as CampaignOverviewRow[]).map(mapCampaignOverview);
+}
+
+export async function getCampanhaResumo(campaignId: string): Promise<CampanhaResumo | null> {
+  if (!isSupabaseConfigured) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select(campaignOverviewSelect)
+    .eq("id", campaignId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) throw new Error(`Falha ao carregar campanha: ${error.message}`);
+  return data ? mapCampaignOverview(data as unknown as CampaignOverviewRow) : null;
+}
+
+export async function getNomeCampanha(campaignId: string): Promise<string> {
+  if (!isSupabaseConfigured) return "Campanha local";
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("name")
+    .eq("id", campaignId)
+    .single();
+  if (error) throw new Error(`Falha ao carregar campanha: ${error.message}`);
+  return data.name;
+}
+
+export async function getEncontros(campaignId: string): Promise<EncontroDaCampanha[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("encounters")
+    .select("id,name,status,round,gm_notes,encounter_combatants(id)")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Falha ao carregar encontros: ${error.message}`);
+  return data.map((encounter) => ({
+    id: encounter.id,
+    nome: encounter.name,
+    estado: encounter.status,
+    rodada: encounter.round,
+    participantes: encounter.encounter_combatants.length,
+    observacoes: encounter.gm_notes ?? "",
+  }));
+}
+
+export async function getMensagensDaCampanha(campaignId: string): Promise<MensagemDaCampanha[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select("id,apparent_sender_name,status,created_at,message_contents(body),message_recipients(id)")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(`Falha ao carregar mensagens: ${error.message}`);
+  return (
+    data as unknown as Array<{
+      id: string;
+      apparent_sender_name: string;
+      status: string;
+      created_at: string;
+      message_contents: { body: string | null } | null;
+      message_recipients: Array<{ id: string }>;
+    }>
+  ).map((message) => ({
+    id: message.id,
+    remetente: message.apparent_sender_name,
+    corpo: message.message_contents?.body ?? "",
+    estado: message.status,
+    destinatarios: message.message_recipients.length,
+    criadoEm: message.created_at,
+  }));
+}
+
+export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("handouts")
+    .select("id,title,type,state,visibility,public_excerpt,handout_contents(protected_text)")
+    .eq("campaign_id", campaignId)
+    .is("deleted_at", null)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(`Falha ao carregar pistas: ${error.message}`);
+  return (data as unknown as Array<{
+    id: string;
+    title: string;
+    type: string;
+    state: string;
+    visibility: string;
+    public_excerpt: string | null;
+    handout_contents: { protected_text: string | null } | null;
+  }>).map((handout) => ({
+    id: handout.id,
+    titulo: handout.title,
+    tipo: handout.type,
+    estado: handout.state,
+    visibilidade: visibilityLabels[handout.visibility] ?? handout.visibility,
+    resumo: handout.public_excerpt ?? "",
+    conteudo: handout.handout_contents?.protected_text ?? "",
+  }));
+}
+
+export async function getEventosAuditoria(campaignId: string): Promise<EventoAuditoria[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_events")
+    .select("id,event_type,entity_type,created_at,metadata")
+    .eq("campaign_id", campaignId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(`Falha ao carregar auditoria: ${error.message}`);
+  return data.map((event) => ({
+    id: event.id,
+    tipo: event.event_type,
+    entidade: event.entity_type,
+    criadoEm: event.created_at,
+    detalhes: (event.metadata ?? {}) as Record<string, unknown>,
+  }));
+}
+
+export async function getRegras(campaignId: string): Promise<RegrasDaCampanha | null> {
+  if (!isSupabaseConfigured) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("campaigns")
+    .select("system_code,rule_profiles(name,description),campaign_rule_settings(zero_hp_mode,zero_sanity_mode,pressure)")
+    .eq("id", campaignId)
+    .single();
+  if (error) throw new Error(`Falha ao carregar regras: ${error.message}`);
+  const profile = data.rule_profiles as unknown as { name: string; description: string | null } | null;
+  const settings = data.campaign_rule_settings as unknown as {
+    zero_hp_mode: string;
+    zero_sanity_mode: string;
+    pressure: number;
+  } | null;
+  return {
+    perfil: profile?.name ?? data.system_code,
+    descricao: profile?.description ?? "",
+    sistema: data.system_code,
+    zeroPv: settings?.zero_hp_mode ?? "dying",
+    zeroSan: settings?.zero_sanity_mode ?? "absorbed_by_zone",
+    pressao: settings?.pressure ?? 0,
+  };
+}
+
+export async function getPerfisDeRegras(): Promise<PerfilDeRegras[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("rule_profiles")
+    .select("id,code,name,description")
+    .order("name");
+  if (error) throw new Error(`Falha ao carregar perfis de regras: ${error.message}`);
+  return data.map((profile) => ({
+    id: profile.id,
+    codigo: profile.code,
+    nome: profile.name,
+    descricao: profile.description ?? "",
+  }));
+}
+
 export async function getRemetentes(campaignId: string): Promise<Remetente[]> {
   if (!isSupabaseConfigured) {
     return [
@@ -184,7 +484,10 @@ export async function getRemetentes(campaignId: string): Promise<Remetente[]> {
   });
 }
 
-export async function getContasDaCampanha(campaignId: string): Promise<ContaDaCampanha[]> {
+export async function getContasDaCampanha(
+  campaignId: string,
+  includeAccessDetails = true,
+): Promise<ContaDaCampanha[]> {
   if (!isSupabaseConfigured) {
     return characters.slice(0, 5).map((personagem, indice) => ({
       membroId: `20000000-0000-4000-8000-00000000000${indice + 1}`,
@@ -195,55 +498,64 @@ export async function getContasDaCampanha(campaignId: string): Promise<ContaDaCa
       situacao: indice === 4 ? "Convite pendente" : "Ativo",
       ultimoAcesso: indice === 4 ? null : new Date(Date.now() - indice * 3_600_000).toISOString(),
       personagem: personagem.name,
+      personagemId: personagem.id,
     }));
   }
-  if (!isAdminConfigured) {
+  if (includeAccessDetails && !isAdminConfigured) {
     throw new Error(
       "A chave de serviço do Supabase é necessária para consultar os e-mails com segurança.",
     );
   }
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("campaign_members")
-    .select("id,user_id,role,status,profiles(display_name)")
-    .eq("campaign_id", campaignId)
-    .order("created_at");
+  const [membersResult, ownersResult] = await Promise.all([
+    supabase
+      .from("campaign_members")
+      .select("id,user_id,role,status,profiles(display_name)")
+      .eq("campaign_id", campaignId)
+      .order("created_at"),
+    supabase
+      .from("character_owners")
+      .select("user_id,characters(id,name)")
+      .eq("campaign_id", campaignId),
+  ]);
+  const { data, error } = membersResult;
   if (error) throw new Error(`Falha ao carregar membros: ${error.message}`);
-  const { data: vinculos, error: vinculosError } = await supabase
-    .from("character_owners")
-    .select("user_id,characters(name)")
-    .eq("campaign_id", campaignId);
+  const { data: vinculos, error: vinculosError } = ownersResult;
   if (vinculosError) throw new Error(`Falha ao carregar vínculos: ${vinculosError.message}`);
-  const admin = createAdminClient();
-  return Promise.all(
-    (
-      data as unknown as Array<{
-        id: string;
-        user_id: string;
-        role: string;
-        status: string;
-        profiles: { display_name: string } | null;
-      }>
-    ).map(async (membro) => {
-      const { data: authData } = await admin.auth.admin.getUserById(membro.user_id);
-      const personagem = (
-        vinculos as unknown as Array<{
-          user_id: string;
-          characters: { name: string } | null;
-        }>
-      ).find((vinculo) => vinculo.user_id === membro.user_id)?.characters?.name;
-      return {
-        membroId: membro.id,
-        usuarioId: membro.user_id,
-        nome: membro.profiles?.display_name ?? "Participante",
-        email: authData.user?.email ?? "E-mail indisponível",
-        papel: roleLabels[membro.role] ?? membro.role,
-        situacao: statusLabels[membro.status] ?? membro.status,
-        ultimoAcesso: authData.user?.last_sign_in_at ?? null,
-        personagem: personagem ?? null,
-      };
-    }),
-  );
+  const authById = new Map<string, { email?: string; last_sign_in_at?: string }>();
+  if (includeAccessDetails) {
+    const admin = createAdminClient();
+    const { data: authData, error: authError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1_000 });
+    if (authError) throw new Error(`Falha ao carregar acessos: ${authError.message}`);
+    authData.users.forEach((user) => authById.set(user.id, user));
+  }
+  const links = vinculos as unknown as Array<{
+    user_id: string;
+    characters: { id: string; name: string } | null;
+  }>;
+  return (
+    data as unknown as Array<{
+      id: string;
+      user_id: string;
+      role: string;
+      status: string;
+      profiles: { display_name: string } | null;
+    }>
+  ).map((membro) => {
+    const authUser = authById.get(membro.user_id);
+    const personagem = links.find((vinculo) => vinculo.user_id === membro.user_id)?.characters;
+    return {
+      membroId: membro.id,
+      usuarioId: membro.user_id,
+      nome: membro.profiles?.display_name ?? "Participante",
+      email: authUser?.email ?? (includeAccessDetails ? "E-mail indisponível" : "E-mail protegido"),
+      papel: roleLabels[membro.role] ?? membro.role,
+      situacao: statusLabels[membro.status] ?? membro.status,
+      ultimoAcesso: authUser?.last_sign_in_at ?? null,
+      personagem: personagem?.name ?? null,
+      personagemId: personagem?.id ?? null,
+    };
+  });
 }
 
 export async function getPersonalizacao(campaignId: string): Promise<PersonalizacaoCampanha> {
@@ -494,7 +806,9 @@ export async function getRoteiros(campaignId: string): Promise<RoteiroDaCampanha
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("script_packages")
-    .select("id,name,description,state,script_versions(version_number)")
+    .select(
+      "id,name,description,state,script_versions!script_versions_script_package_id_fkey(version_number)",
+    )
     .eq("campaign_id", campaignId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });

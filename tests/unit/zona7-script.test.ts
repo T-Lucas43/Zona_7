@@ -51,4 +51,12 @@ describe("roteiro Zona 7", () => {
     const result = parseZona7Script(valid.replace("goto: fim", "goto: ausente"), "markdown");
     expect(result.issues.some((issue) => issue.code === "missing_target")).toBe(true);
   });
+  it("aceita perícia da ficha como fórmula dinâmica", () => {
+    const source = valid.replace(
+      "type: narration",
+      "type: skill_test\nformula: character_skill\nskill: Percepção",
+    );
+    const result = parseZona7Script(source, "markdown");
+    expect(result.issues.some((issue) => issue.code === "invalid_formula")).toBe(false);
+  });
 });

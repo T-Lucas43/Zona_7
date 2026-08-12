@@ -1,4 +1,5 @@
-import { Archive, CheckCircle2, LockKeyhole, Radio, Shield, Swords } from "lucide-react";
+import { CheckCircle2, Shield } from "lucide-react";
+import { notFound } from "next/navigation";
 import { CharacterCard } from "@/components/character/character-card";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { ResourceBars } from "@/components/character/resource-bars";
@@ -11,16 +12,19 @@ import { CharacterNotesEditor } from "@/components/master/character-notes-editor
 import { CharacterRulesManager } from "@/components/master/character-rules-manager";
 import { CharacterVisibilityManager } from "@/components/master/character-visibility-manager";
 import { CharacterCreator } from "@/components/master/character-creator";
+import { CreateSessionForm } from "@/components/master/create-session-form";
+import { EncounterManager } from "@/components/master/encounter-manager";
+import { HandoutManager } from "@/components/master/handout-manager";
 import { MapStudio } from "@/components/master/map-studio";
 import { MessagingStudio } from "@/components/master/messaging-studio";
 import { MeterControl } from "@/components/master/meter-control";
 import { ResourceConsole } from "@/components/master/resource-console";
 import { SessionHub } from "@/components/master/session-hub";
 import { ScriptStudio } from "@/components/master/script-studio";
-import { campaign, characters, liveSession, messages, threats } from "@/lib/demo-data";
 import {
-  getAuthorizedCharacter,
   getCampaignCharacters,
+  getSessionCharacterDetails,
+  getSessionCharacters,
   getCharacterActions,
   getCharacterAbilities,
   getCharacterSkills,
@@ -30,7 +34,13 @@ import {
   getAtores,
   getCenaPrincipal,
   getContasDaCampanha,
+  getEncontros,
+  getEventosAuditoria,
+  getMensagensDaCampanha,
+  getNomeCampanha,
   getPersonalizacao,
+  getPistas,
+  getRegras,
   getRemetentes,
   getRoteiros,
 } from "@/server/repositories/master-repository";
@@ -40,6 +50,7 @@ import {
   getSessionPublicState,
 } from "@/server/repositories/session-repository";
 import { requireCampaignMaster } from "@/server/services/master-access";
+import { getSessionScriptRun } from "@/server/repositories/script-repository";
 
 export default async function MasterSectionPage({
   params,
@@ -57,36 +68,53 @@ export default async function MasterSectionPage({
 
 async function SessionConsole({ campaignId, sessionId }: { campaignId: string; sessionId?: string }) {
   const session = await getCurrentSession(campaignId, sessionId);
-  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis] = await Promise.all([
-    getCampaignCharacters(campaignId),
+  if (!session) {
+    const nomeCampanha = await getNomeCampanha(campaignId);
+    return (
+      <div>
+        <p className="eyebrow">{`${nomeCampanha} // central da sessão`}</p>
+        <h1 className="mt-1 text-3xl font-black">Nenhuma sessão cadastrada</h1>
+        <section className="panel mt-6 rounded-lg p-6">
+          <p className="text-sm text-[#92959c]">
+            Esta campanha ainda não possui uma sessão real. Crie uma sessão para abrir a central ao vivo.
+          </p>
+          <CreateSessionForm campaignId={campaignId} />
+        </section>
+      </div>
+    );
+  }
+  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis, execucaoRoteiro] = await Promise.all([
+    getSessionCharacters(campaignId, session.id),
     getCenaPrincipal(campaignId),
-    getContasDaCampanha(campaignId),
+    getContasDaCampanha(campaignId, false),
     getRemetentes(campaignId),
     getRoteiros(campaignId),
     getSessionPublicState(campaignId, session.id),
     getSessionCast(campaignId),
+    getSessionScriptRun(session.id),
   ]);
+  const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
   return (
     <SessionHub
       campaignId={campaignId}
       session={session}
       initialPublicState={estadoPublico}
       initialCharacters={elenco}
+      characterDetails={detalhes}
       scene={cena}
       accounts={contas}
       senders={remetentes}
-      scripts={roteiros}
-      visibleCharacterIds={atoresVisiveis.flatMap((ator) => ator.characterId ? [ator.characterId] : [])}
+      scripts={roteiros.filter((roteiro) => roteiro.estado === "published" || roteiro.estado === "Publicado")}
+      initialScriptRun={execucaoRoteiro}
+      visibleCharacterIds={atoresVisiveis.flatMap((ator) => ator.characterId && elenco.some((character) => character.id === ator.characterId) ? [ator.characterId] : [])}
     />
   );
 }
 
 async function CharacterEditor({ campaignId, id }: { campaignId: string; id: string }) {
-  const [loadedCharacter, elenco] = await Promise.all([
-    getAuthorizedCharacter(id),
-    getCampaignCharacters(campaignId),
-  ]);
-  const character = loadedCharacter ?? elenco[0] ?? characters[0];
+  const elenco = await getCampaignCharacters(campaignId);
+  const character = elenco.find((item) => item.id === id);
+  if (!character) notFound();
   const [habilidades, pericias, acoes, fraquezas] = await Promise.all([
     getCharacterAbilities(character.id),
     getCharacterSkills(character.id),
@@ -135,14 +163,19 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
             <h2 className="font-extrabold">Perícias e ações</h2>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {pericias.map((pericia) => (
-                <div
-                  className="flex justify-between rounded border border-[#30333a] p-3 text-sm"
-                  key={pericia.id}
-                >
-                  <span>
-                    {pericia.name} <small className="text-[#777a82]">{pericia.attribute}</small>
-                  </span>
-                  <strong>+{pericia.bonus}</strong>
+                <div className="rounded border border-[#30333a] p-3 text-sm" key={pericia.id}>
+                  <div className="flex justify-between gap-3">
+                    <span>
+                      {pericia.name} <small className="text-[#777a82]">{pericia.attribute}</small>
+                    </span>
+                    <strong>+{pericia.bonus}</strong>
+                  </div>
+                  <div className="mt-3 rounded border border-[#262930] bg-black/20 p-2">
+                    <span className="eyebrow">informações</span>
+                    <p className="mt-1 text-xs text-[#92959c]">
+                      {pericia.notes || "Nenhuma informação adicional cadastrada."}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -153,6 +186,12 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
                   <p className="mt-1 text-xs text-[#777a82]">
                     {acao.test} · {acao.damage} · {acao.type}
                   </p>
+                  <div className="mt-3 rounded border border-[#262930] bg-black/20 p-2">
+                    <span className="eyebrow">informações</span>
+                    <p className="mt-1 text-xs text-[#92959c]">
+                      {acao.description || "Nenhuma informação adicional cadastrada."}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -212,20 +251,29 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     scripts: "Roteiros e automações",
   };
   const title = titles[area] ?? "Console da campanha";
-  const personagens = await getCampaignCharacters(campaignId);
-  const contas =
-    area === "members" || area === "messages" || area === "characters"
-      ? await getContasDaCampanha(campaignId)
-      : [];
-  const remetentes = area === "messages" ? await getRemetentes(campaignId) : [];
-  const personalizacao = area === "settings" ? await getPersonalizacao(campaignId) : null;
-  const atores = area === "actors" ? await getAtores(campaignId) : [];
-  const cena = area === "maps" || area === "collective" || area === "actors" ? await getCenaPrincipal(campaignId) : null;
-  const roteiros = area === "scripts" ? await getRoteiros(campaignId) : [];
+  const needsCharacters = area === "characters" || area === "members" || area === "messages";
+  const needsAccounts = area === "members" || area === "messages" || area === "characters";
+  const needsScene = area === "maps" || area === "collective" || area === "actors";
+  const [nomeCampanha, personagens, contas, remetentes, personalizacao, atores, cena, roteiros, encontros, mensagens, pistas, regras, auditoria] =
+    await Promise.all([
+      getNomeCampanha(campaignId),
+      needsCharacters ? getCampaignCharacters(campaignId) : Promise.resolve([]),
+      needsAccounts ? getContasDaCampanha(campaignId, area !== "messages") : Promise.resolve([]),
+      area === "messages" ? getRemetentes(campaignId) : Promise.resolve([]),
+      area === "settings" ? getPersonalizacao(campaignId) : Promise.resolve(null),
+      area === "actors" ? getAtores(campaignId) : Promise.resolve([]),
+      needsScene ? getCenaPrincipal(campaignId) : Promise.resolve(null),
+      area === "scripts" ? getRoteiros(campaignId) : Promise.resolve([]),
+      area === "encounters" ? getEncontros(campaignId) : Promise.resolve([]),
+      area === "messages" ? getMensagensDaCampanha(campaignId) : Promise.resolve([]),
+      area === "handouts" ? getPistas(campaignId) : Promise.resolve([]),
+      area === "rules" ? getRegras(campaignId) : Promise.resolve(null),
+      area === "audit" ? getEventosAuditoria(campaignId) : Promise.resolve([]),
+    ]);
   return (
     <div>
       <p className="eyebrow">
-        {campaign.name}
+        {nomeCampanha}
         {" // "}
         {title}
       </p>
@@ -241,113 +289,58 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         </>
       )}
       {area === "members" && <AccountManager campaignId={campaignId} initialAccounts={contas} characters={personagens} />}
-      {area === "sessions" && (
-        <div className="panel mt-6 rounded-lg p-5">
-          <span className="tag">
-            <Radio size={12} /> EM ANDAMENTO
-          </span>
-          <h2 className="mt-4 text-xl font-extrabold">{liveSession.title}</h2>
-          <a
-            className="btn btn-primary mt-4"
-            href={`/master/campaigns/${campaignId}/sessions/${liveSession.id}`}
-          >
-            Abrir painel
-          </a>
-        </div>
-      )}
-      {area === "encounters" && (
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          {threats.map((threat) => (
-            <article className="panel rounded-lg p-5" key={threat.name}>
-              <div className="flex justify-between">
-                <Swords className="text-[#d54a56]" />
-                <span className="tag">VD {threat.vd}</span>
-              </div>
-              <h2 className="mt-4 font-extrabold">{threat.name}</h2>
-              <p className="mt-2 text-xs text-[#858890]">
-                DEF {threat.defense} · PV {threat.pv} · {threat.state}
-              </p>
-            </article>
-          ))}
-        </div>
-      )}
+      {area === "encounters" && <EncounterManager campaignId={campaignId} initialItems={encontros} />}
       {area === "messages" && (
         <div className="mt-6 space-y-4">
           <MessagingStudio campaignId={campaignId} initialSenders={remetentes} accounts={contas} />
           <section className="grid gap-3 md:grid-cols-2">
-            {messages.map((message) => (
+            {mensagens.map((message) => (
               <article className="panel rounded-lg p-4" key={message.id}>
                 <p className="eyebrow">
-                  {message.sender} → {message.recipient}
+                  {message.remetente} → {message.destinatarios} destinatário(s)
                 </p>
-                <p className="mt-2 text-sm">{message.body}</p>
-                <span className="tag mt-3">{message.status}</span>
+                <p className="mt-2 text-sm">{message.corpo || "Mensagem sem conteúdo textual."}</p>
+                <span className="tag mt-3">{message.estado}</span>
               </article>
             ))}
+            {mensagens.length === 0 && <p className="text-sm text-[#777a82]">Nenhuma mensagem enviada.</p>}
           </section>
         </div>
       )}
-      {area === "handouts" && (
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            "Medalha dos Oito Segundos",
-            "Arquivo Branco de Thompson",
-            "Agulha da Marca Ausente",
-            "Espelho Imóvel",
-            "Gravador das Vozes Recortadas",
-            "Lente do Favorito",
-            "Sentença Unânime",
-          ].map((name) => (
-            <article className="panel rounded-lg p-5" key={name}>
-              <LockKeyhole className="text-[#cd4652]" />
-              <h2 className="mt-5 font-extrabold">{name}</h2>
-              <p className="mt-2 text-xs text-[#7e8188]">
-                Somente mestres · revelação parcial disponível
-              </p>
-            </article>
-          ))}
-        </div>
-      )}
+      {area === "handouts" && <HandoutManager campaignId={campaignId} initialItems={pistas} />}
       {area === "rules" && (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        regras ? <div className="mt-6 grid gap-4 md:grid-cols-2">
           <section className="panel rounded-lg p-5">
             <Shield className="text-[#d84b57]" />
-            <h2 className="mt-4 font-extrabold">zona7_convergencia</h2>
+            <h2 className="mt-4 font-extrabold">{regras.perfil}</h2>
             <p className="mt-2 text-sm leading-6 text-[#8f9299]">
-              PV, PE, SAN, NEX, Pressão 0–7 e fail-forward configurável.
+              {regras.descricao || regras.sistema}
             </p>
           </section>
           <section className="panel rounded-lg p-5">
-            <Archive className="text-[#999ca3]" />
-            <h2 className="mt-4 font-extrabold">zona7_classic</h2>
+            <Shield className="text-[#999ca3]" />
+            <h2 className="mt-4 font-extrabold">Configuração aplicada</h2>
             <p className="mt-2 text-sm leading-6 text-[#8f9299]">
-              10 HP, 20 SAN, morte e absorção pela Zona configuradas.
+              PV zero: {regras.zeroPv} · SAN zero: {regras.zeroSan} · Pressão: {regras.pressao}/7
             </p>
           </section>
-        </div>
+        </div> : <EmptyState text="Nenhum perfil de regras foi configurado." />
       )}
       {area === "audit" && (
         <div className="panel mt-6 rounded-lg p-5">
-          <ol className="space-y-5">
-            {[
-              "Sessão iniciada",
-              "Mensagem privada agendada",
-              "Percepção DT 15 solicitada",
-              "Estado Filmado aplicado",
-              "Pressão alterada de 2 para 3",
-            ].map((event, index) => (
-              <li className="flex gap-3" key={event}>
+          {auditoria.length ? <ol className="space-y-5">
+            {auditoria.map((event) => (
+              <li className="flex gap-3" key={event.id}>
                 <CheckCircle2 className="shrink-0 text-[#5ebf89]" size={17} />
                 <div>
-                  <p className="text-sm font-bold">{event}</p>
+                  <p className="text-sm font-bold">{event.tipo}</p>
                   <p className="mt-1 font-mono text-[0.65rem] text-[#696c73]">
-                    {String(index + 1).padStart(4, "0")} · EVENTO IMUTÁVEL · DESFAZER CRIA
-                    COMPENSAÇÃO
+                    {event.entidade} · {new Date(event.criadoEm).toLocaleString("pt-BR")}
                   </p>
                 </div>
               </li>
             ))}
-          </ol>
+          </ol> : <p className="text-sm text-[#777a82]">Nenhum evento de auditoria registrado.</p>}
         </div>
       )}
       {area === "settings" && personalizacao && (
@@ -358,4 +351,8 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
       {area === "scripts" && <ScriptStudio campaignId={campaignId} initialScripts={roteiros} />}
     </div>
   );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div className="panel mt-6 rounded-lg p-6 text-sm text-[#858890]">{text}</div>;
 }

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Archive, Pencil, Plus, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-type Skill = { id: string; name: string; attribute: string; bonus: number; training: string };
+type Skill = { id: string; name: string; attribute: string; bonus: number; training: string; notes?: string };
 type Action = {
   id: string;
   name: string;
@@ -12,6 +12,7 @@ type Action = {
   damage: string;
   range: string;
   type: string;
+  description?: string;
 };
 type Weakness = { id: string; name: string; effect: string; active: boolean };
 type Area = "skill" | "action" | "weakness";
@@ -41,6 +42,7 @@ export function CharacterRulesManager({
   const [range, setRange] = useState("Corpo a corpo");
   const [damageType, setDamageType] = useState("Impacto");
   const [effect, setEffect] = useState("");
+  const [information, setInformation] = useState("");
   const [notice, setNotice] = useState("");
 
   function clear(nextArea = area) {
@@ -55,6 +57,7 @@ export function CharacterRulesManager({
     setRange("Corpo a corpo");
     setDamageType("Impacto");
     setEffect("");
+    setInformation("");
     setNotice("");
   }
 
@@ -65,6 +68,7 @@ export function CharacterRulesManager({
     setAttribute(item.attribute.toUpperCase());
     setBonus(item.bonus);
     setTraining(item.training);
+    setInformation(item.notes ?? "");
   }
   function editAction(item: Action) {
     clear("action");
@@ -74,6 +78,7 @@ export function CharacterRulesManager({
     setDamage(item.damage);
     setRange(item.range);
     setDamageType(item.type);
+    setInformation(item.description ?? "");
   }
   function editWeakness(item: Weakness) {
     clear("weakness");
@@ -99,9 +104,9 @@ export function CharacterRulesManager({
     const common = { area, operation: id ? "update" : "create", id: id || undefined, name };
     const body =
       area === "skill"
-        ? { ...common, attribute, bonus, training }
+        ? { ...common, attribute, bonus, training, information }
         : area === "action"
-          ? { ...common, test, damage, range, damageType }
+          ? { ...common, test, damage, range, damageType, information }
           : { ...common, effect };
     if (await request(body)) {
       setNotice(id ? "Registro atualizado e auditado." : "Registro criado e auditado.");
@@ -140,6 +145,7 @@ export function CharacterRulesManager({
                 key={item.id}
                 title={item.name}
                 detail={`${item.attribute} · +${item.bonus} · ${item.training}`}
+                information={item.notes}
                 onEdit={() => editSkill(item)}
                 onArchive={() => void archive("skill", item.id)}
               />
@@ -156,6 +162,7 @@ export function CharacterRulesManager({
                 key={item.id}
                 title={item.name}
                 detail={`${item.test} · ${item.damage}`}
+                information={item.description}
                 onEdit={() => editAction(item)}
                 onArchive={() => void archive("action", item.id)}
               />
@@ -242,6 +249,15 @@ export function CharacterRulesManager({
                   <option value="expert">Especialista</option>
                 </select>
               </label>
+              <label className="col-span-2 text-xs font-bold">
+                Caixa de informações da perícia
+                <textarea
+                  className="field mt-1 min-h-24"
+                  placeholder="Explique quando usar, especialidades, limitações ou observações."
+                  value={information}
+                  onChange={(event) => setInformation(event.target.value)}
+                />
+              </label>
             </div>
           )}
           {area === "action" && (
@@ -278,6 +294,15 @@ export function CharacterRulesManager({
                   className="field mt-1"
                   value={damageType}
                   onChange={(event) => setDamageType(event.target.value)}
+                />
+              </label>
+              <label className="col-span-2 text-xs font-bold">
+                Caixa de informações da ação
+                <textarea
+                  className="field mt-1 min-h-24"
+                  placeholder="Descreva funcionamento, requisitos e efeitos adicionais."
+                  value={information}
+                  onChange={(event) => setInformation(event.target.value)}
                 />
               </label>
             </div>
@@ -334,11 +359,13 @@ function RuleList({
 function RuleCard({
   title,
   detail,
+  information,
   onEdit,
   onArchive,
 }: {
   title: string;
   detail: string;
+  information?: string;
   onEdit: () => void;
   onArchive: () => void;
 }) {
@@ -346,6 +373,12 @@ function RuleCard({
     <article className="rounded border border-[#30333a] p-3">
       <strong className="text-xs">{title}</strong>
       <p className="mt-1 line-clamp-2 text-[0.68rem] text-[#777a82]">{detail}</p>
+      <div className="mt-2 rounded border border-[#292c32] bg-black/20 p-2">
+        <span className="block text-[0.6rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+        <p className="mt-1 line-clamp-3 text-[0.68rem] leading-5 text-[#92959c]">
+          {information?.trim() || "Nenhuma informação adicional cadastrada."}
+        </p>
+      </div>
       <div className="mt-2 flex gap-2">
         <button className="btn px-2 py-1" type="button" onClick={onEdit}>
           <Pencil size={12} /> Editar

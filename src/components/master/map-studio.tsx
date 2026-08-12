@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ImageUp, Map, Move, ZoomIn, ZoomOut } from "lucide-react";
 import { getCharacterPortraitStyle } from "@/components/character/character-portrait";
 import type { CenaDaCampanha } from "@/server/repositories/master-repository";
@@ -23,6 +23,7 @@ export function MapStudio({
   initialScene,
   collective = false,
   hiddenCharacterIds = [],
+  allowedCharacterIds,
   selectedCharacterId,
   onSelectCharacter,
 }: {
@@ -30,6 +31,7 @@ export function MapStudio({
   initialScene: CenaDaCampanha;
   collective?: boolean;
   hiddenCharacterIds?: string[];
+  allowedCharacterIds?: string[];
   selectedCharacterId?: string;
   onSelectCharacter?: (characterId: string) => void;
 }) {
@@ -40,21 +42,28 @@ export function MapStudio({
   const [fundo, setFundo] = useState<string | null>(initialScene.backgroundUrl ?? null);
   const [zoom, setZoom] = useState(100);
   const mapa = useRef<HTMLDivElement>(null);
+  const availableTokens = useMemo(
+    () => cena.tokens.filter((token) => !token.characterId || !allowedCharacterIds || allowedCharacterIds.includes(token.characterId)),
+    [allowedCharacterIds, cena.tokens],
+  );
+  const effectiveSelectedTokenId = availableTokens.some((token) => token.id === selecionado)
+    ? selecionado
+    : availableTokens[0]?.id ?? "";
   async function mover(event: React.MouseEvent<HTMLDivElement>) {
-    if (collective || !selecionado || !mapa.current) return;
+    if (collective || !effectiveSelectedTokenId || !mapa.current) return;
     const rect = mapa.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
     const response = await fetch("/api/master/map/move", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignId, tokenId: selecionado, x, y, reason: motivo }),
+      body: JSON.stringify({ campaignId, tokenId: effectiveSelectedTokenId, x, y, reason: motivo }),
     });
     const result = (await response.json()) as { error?: string };
     if (!response.ok) return setAviso(result.error ?? "Falha ao mover token.");
     setCena((atual) => ({
       ...atual,
-      tokens: atual.tokens.map((token) => (token.id === selecionado ? { ...token, x, y } : token)),
+      tokens: atual.tokens.map((token) => (token.id === effectiveSelectedTokenId ? { ...token, x, y } : token)),
     }));
     setAviso("Posição salva e distribuída aos dispositivos conectados.");
   }
@@ -126,7 +135,7 @@ export function MapStudio({
               </div>
             </div>
           )}
-          {cena.tokens
+          {availableTokens
             .filter((token) => token.visivel && (!token.characterId || !hiddenCharacterIds.includes(token.characterId)))
             .map((token) => {
               const portraitStyle = tokenPortraitStyle(token);
@@ -135,7 +144,7 @@ export function MapStudio({
                 type="button"
                 key={token.id}
                 aria-label={`Token de ${token.nome}`}
-                className={`map-token map-token-${tokenBodyProfile(token)} absolute z-10 ${selecionado === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
+                className={`map-token map-token-${tokenBodyProfile(token)} absolute z-10 ${effectiveSelectedTokenId === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
                 style={{
                   left: `${token.x * 100}%`,
                   top: `${token.y * 100}%`,
@@ -176,10 +185,10 @@ export function MapStudio({
               Token
               <select
                 className="field mt-1"
-                value={selecionado}
+                value={effectiveSelectedTokenId}
                 onChange={(event) => setSelecionado(event.target.value)}
               >
-                {cena.tokens.map((token) => (
+                {availableTokens.map((token) => (
                   <option value={token.id} key={token.id}>
                     {token.nome}
                   </option>

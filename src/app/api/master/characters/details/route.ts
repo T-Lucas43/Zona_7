@@ -20,6 +20,7 @@ const schema = z.discriminatedUnion("area", [
     attribute: z.enum(["AGI", "FOR", "INT", "PRE", "VIG"]).optional(),
     bonus: z.number().int().min(-99).max(99).optional(),
     training: z.enum(["destreinado", "treinado", "veterano", "expert"]).optional(),
+    information: z.string().trim().max(2_000).optional(),
   }),
   z.object({
     ...base,
@@ -31,6 +32,7 @@ const schema = z.discriminatedUnion("area", [
     damage: z.string().trim().min(1).max(80).optional(),
     range: z.string().trim().max(100).optional(),
     damageType: z.string().trim().max(100).optional(),
+    information: z.string().trim().max(4_000).optional(),
   }),
   z.object({
     ...base,
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
               training_degree: input.training!,
               trained: input.training !== "destreinado",
               formula: `${input.attribute!.toLowerCase()}+${input.bonus!}`,
+              notes: input.information || null,
               updated_by: user.id,
             }
           : input.area === "action"
@@ -113,6 +116,7 @@ export async function POST(request: Request) {
                 damage_formula: input.damage!,
                 range_text: input.range || null,
                 damage_type: input.damageType || null,
+                description: input.information || null,
                 updated_by: user.id,
               }
             : {

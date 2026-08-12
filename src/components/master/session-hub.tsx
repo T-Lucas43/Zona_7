@@ -1,32 +1,40 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, EyeOff, HeartPulse, LockKeyhole, MessageSquare, Package, Radio, ScrollText, Send, Users } from "lucide-react";
+import Link from "next/link";
+import { Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare, Package, Radio, ScrollText, Send, ShieldAlert, Sparkles, Swords, UserRound, Users } from "lucide-react";
 import { LiveSync } from "@/components/live-sync";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { MapStudio } from "@/components/master/map-studio";
 import { SessionControls } from "@/components/master/session-controls";
+import { SessionClock } from "@/components/master/session-clock";
+import { SessionScriptControl } from "@/components/master/session-script-control";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
 import type { CenaDaCampanha, ContaDaCampanha, Remetente, RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionPublicState } from "@/server/repositories/session-repository";
+import type { SessionScriptRun } from "@/server/repositories/script-repository";
+import type { SessionCharacterDetails } from "@/server/repositories/character-repository";
 
 const resourceLabels: Record<ResourceKind, string> = { pv: "PV", pe: "PE", san: "SAN" };
 
 export function SessionHub({
-  campaignId, session, initialPublicState, initialCharacters, scene, accounts, senders, scripts, visibleCharacterIds,
+  campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, visibleCharacterIds,
 }: {
   campaignId: string;
   session: SessionSummary;
   initialPublicState: SessionPublicState;
   initialCharacters: CharacterSummary[];
+  characterDetails: SessionCharacterDetails[];
   scene: CenaDaCampanha;
   accounts: ContaDaCampanha[];
   senders: Remetente[];
   scripts: RoteiroDaCampanha[];
+  initialScriptRun: SessionScriptRun | null;
   visibleCharacterIds: string[];
 }) {
   const [characters, setCharacters] = useState(initialCharacters);
+  const [details, setDetails] = useState(characterDetails);
   const [selectedId, setSelectedId] = useState(initialCharacters[0]?.id ?? "");
   const [visible, setVisible] = useState(() => new Set(visibleCharacterIds));
   const [notice, setNotice] = useState("");
@@ -40,9 +48,12 @@ export function SessionHub({
   const [messageTarget, setMessageTarget] = useState<"selected" | "all">("selected");
   const [messageSender, setMessageSender] = useState(senders[0]?.nome ?? "Mestre");
   const [messageBody, setMessageBody] = useState("");
+  const [messageReview, setMessageReview] = useState(false);
   const [publicState, setPublicState] = useState(initialPublicState);
+  const [sheetTab, setSheetTab] = useState<"summary" | "inventory" | "abilities" | "rules">("summary");
   const selected = useMemo(() => characters.find((item) => item.id === selectedId) ?? characters[0], [characters, selectedId]);
-  const selectedAccount = accounts.find((account) => account.personagem === selected?.name);
+  const selectedDetails = details.find((item) => item.characterId === selected?.id);
+  const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
 
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
@@ -68,6 +79,26 @@ export function SessionHub({
     setNotice(`${selected.name} ${next ? "voltou à" : "foi ocultado da"} tela dos jogadores.`);
   }
 
+  async function changeAbilityState(abilityId: string, state: "unlocked" | "sealed") {
+    if (!selected) return;
+    const response = await fetch("/api/master/abilities/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        campaignId,
+        characterAbilityId: abilityId,
+        state,
+        reason: `${state === "unlocked" ? "Liberação" : "Selamento"} durante a sessão ${session.title}`,
+      }),
+    });
+    const result = (await response.json()) as { error?: string };
+    if (!response.ok) return setNotice(result.error ?? "Falha ao alterar habilidade.");
+    setDetails((items) => items.map((item) => item.characterId === selected.id
+      ? { ...item, abilities: item.abilities.map((ability) => ability.id === abilityId ? { ...ability, state } : ability) }
+      : item));
+    setNotice(`${selected.name}: habilidade ${state === "unlocked" ? "liberada" : "selada"}. O jogador recebeu a atualização em tempo real.`);
+  }
+
   async function deliver(event: React.FormEvent) {
     event.preventDefault();
     if (!selected) return;
@@ -85,12 +116,17 @@ export function SessionHub({
 
   async function sendMessage(event: React.FormEvent) {
     event.preventDefault();
+    if (!messageReview) {
+      setMessageReview(true);
+      setNotice("Revise remetente, destinatários e conteúdo antes de confirmar.");
+      return;
+    }
     const recipientUserIds = messageTarget === "all" ? accounts.filter((account) => account.papel === "Jogador").map((account) => account.usuarioId) : selectedAccount ? [selectedAccount.usuarioId] : [];
     if (recipientUserIds.length === 0) return setNotice("Vincule uma conta ao personagem antes de enviar mensagem.");
     const response = await fetch("/api/master/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId, apparentSenderName: messageSender, recipientUserIds, body: messageBody, format: "text", visibility: "selected" }) });
     const result = (await response.json()) as { error?: string };
     if (!response.ok) return setNotice(result.error ?? "Falha ao enviar mensagem.");
-    setNotice(`Mensagem enviada ${messageTarget === "all" ? "a todos os jogadores" : `a ${selected?.name}`}.`); setMessageBody("");
+    setNotice(`Mensagem enviada ${messageTarget === "all" ? "a todos os jogadores" : `a ${selected?.name}`}.`); setMessageBody(""); setMessageReview(false);
   }
 
   async function savePublicState(event: React.FormEvent) {
@@ -105,34 +141,48 @@ export function SessionHub({
       <LiveSync campaignId={campaignId} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><p className="eyebrow">central da sessão // tela coletiva integrada</p><h1 className="mt-1 text-3xl font-black">{session.title}</h1></div>
-        <span className="tag"><Radio size={12} /> {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}</span>
+        <div className="flex flex-wrap gap-2">
+          <Link className="btn" href={`/master/campaigns/${campaignId}/encounters`}><Swords size={15} /> Encontros</Link>
+          <Link className="btn" href={`/master/campaigns/${campaignId}/actors`}><Sparkles size={15} /> Entidades e NPCs</Link>
+          <span className="tag"><Radio size={12} /> {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}</span>
+        </div>
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#32353c] bg-[#111318] p-4">
         <div><p className="text-xs text-[#7d8087]">CENA PÚBLICA ATUAL</p><strong>{publicState.sceneTitle} · Pressão {session.pressure}/7</strong></div>
-        <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
+        <div className="flex flex-wrap items-center gap-3">
+          <SessionClock
+            initialElapsedSeconds={session.elapsedSeconds ?? 0}
+            initialTimerStartedAt={session.timerStartedAt}
+            initialStatus={session.status}
+          />
+          <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
+        </div>
       </div>
       <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-4">
-          <section className="rounded-lg border border-[#5b3036] bg-[#44131a]/15 p-5">
-            <div className="flex items-center gap-2 text-[#e3848d]"><LockKeyhole size={17} /><div><p className="eyebrow">ordem da sessão</p><h2 className="font-extrabold">Roteiro — somente mestre</h2></div></div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">{scripts.map((script) => <div className="rounded border border-[#4b2a30] p-3" key={script.id}><strong className="text-sm">{script.nome}</strong><p className="mt-1 text-xs text-[#96787c]">{script.descricao} · versão {script.versao}</p></div>)}</div>
-          </section>
+          <SessionScriptControl campaignId={campaignId} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} />
           <MapStudio
             campaignId={campaignId}
             initialScene={scene}
             hiddenCharacterIds={characters.filter((character) => !visible.has(character.id)).map((character) => character.id)}
+            allowedCharacterIds={characters.map((character) => character.id)}
             selectedCharacterId={selected?.id}
-            onSelectCharacter={setSelectedId}
+            onSelectCharacter={(characterId) => { setSelectedId(characterId); setMessageReview(false); }}
           />
           <section className="panel rounded-lg p-5">
             <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Users size={17} className="text-[#d84b57]" /><h2 className="font-extrabold">Personagens da sessão</h2></div><span className="tag">clique para controlar</span></div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {characters.map((character) => (
-                <button type="button" onClick={() => setSelectedId(character.id)} key={character.id} className={`rounded-lg border p-4 text-left transition ${selected?.id === character.id ? "border-[#a83a45] bg-[#8a1b27]/15" : "border-[#30333a] bg-black/10"}`}>
+                <button type="button" onClick={() => { setSelectedId(character.id); setMessageReview(false); }} key={character.id} className={`central-card rounded-lg border p-4 text-left transition ${selected?.id === character.id ? "border-[#a83a45] bg-[#8a1b27]/15" : "border-[#30333a] bg-black/10"}`}>
                   <div className="flex items-center gap-3"><CharacterPortrait name={character.name} portraitUrl={character.portraitUrl} className="size-12 rounded-lg" /><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><strong className="truncate">{character.name}</strong>{visible.has(character.id) ? <Eye size={15} className="shrink-0 text-[#7bd5a5]" /> : <EyeOff size={15} className="shrink-0 text-[#d98b93]" />}</div><p className="mt-1 truncate text-xs text-[#858891]">{character.codename ?? character.role} · NEX {character.nex}%</p></div></div>
                   <div className="mt-3 flex flex-wrap gap-2">{Object.values(character.resources).map((item) => <span className="tag" key={item.kind}>{item.kind.toUpperCase()} {item.current}/{item.maximum}</span>)}</div>
                 </button>
               ))}
+              {characters.length === 0 && (
+                <div className="rounded-lg border border-dashed border-[#3b3e46] p-5 text-sm text-[#858890] sm:col-span-2 xl:col-span-3">
+                  Nenhum personagem entrou nesta sessão. Assim que um jogador vinculado abrir a sala, sua ficha aparecerá aqui em tempo real.
+                </div>
+              )}
             </div>
           </section>
           <form className="panel rounded-lg p-5" onSubmit={savePublicState}>
@@ -151,6 +201,49 @@ export function SessionHub({
             <input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} aria-label="Motivo da alteração" />
             <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn border-[#6e252e] text-[#f0949d]" type="button" onClick={() => void mutateResource(-1)}>Aplicar dano/perda</button><button className="btn border-[#2f6147] text-[#7bd5a5]" type="button" onClick={() => void mutateResource(1)}>Curar/recuperar</button></div>
           </section>}
+          {selected && selectedDetails && (
+            <section className="panel session-sheet rounded-lg p-5">
+              <div className="flex items-center gap-3">
+                <CharacterPortrait name={selected.name} portraitUrl={selected.portraitUrl} className="size-14 rounded-xl" />
+                <div><p className="eyebrow">ficha na central</p><h2 className="font-extrabold">{selected.name}</h2><p className="text-xs text-[#858890]">{selected.origin} · {selected.className} · {selected.path}</p></div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {([
+                  ["summary", "Resumo", UserRound],
+                  ["inventory", "Inventário", Backpack],
+                  ["abilities", "Habilidades", Sparkles],
+                  ["rules", "Perícias e ações", BookOpen],
+                ] as const).map(([value, label, Icon]) => (
+                  <button className={`btn px-2 ${sheetTab === value ? "border-[#a83a45] bg-[#8a1b27]/20" : ""}`} type="button" key={value} onClick={() => setSheetTab(value)}><Icon size={14} /> {label}</button>
+                ))}
+              </div>
+              {sheetTab === "summary" && <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-3 gap-2">{Object.values(selected.resources).map((item) => <div className="rounded border border-[#30333a] p-2 text-center" key={item.kind}><span className="text-[0.6rem] uppercase text-[#777a82]">{item.kind}</span><strong className="block">{item.current}/{item.maximum}</strong></div>)}</div>
+                <div className="grid grid-cols-5 gap-1">{Object.entries(selected.attributes).map(([key, value]) => <div className="rounded border border-[#30333a] p-2 text-center" key={key}><span className="text-[0.55rem] uppercase text-[#777a82]">{key}</span><strong className="block text-sm">{value}</strong></div>)}</div>
+                <p className="rounded border border-[#30333a] p-3 text-xs text-[#a3a5ab]">DEF {selected.defense} · NEX {selected.nex}% · {selected.status}</p>
+              </div>}
+              {sheetTab === "inventory" && <div className="mt-4 space-y-2">
+                {selectedDetails.inventory.map((item) => <div className="rounded border border-[#30333a] p-3" key={item.id}><strong className="text-sm">{item.name}</strong><p className="mt-1 text-xs text-[#858890]">{item.detail} · {item.state}</p></div>)}
+                {selectedDetails.inventory.length === 0 && <p className="text-xs text-[#777a82]">Inventário vazio.</p>}
+              </div>}
+              {sheetTab === "abilities" && <div className="mt-4 space-y-2">
+                {selectedDetails.abilities.map((ability) => <article className="rounded border border-[#30333a] p-3" key={ability.id}>
+                  <div className="flex justify-between gap-2"><strong className="text-sm">{ability.name}</strong><span className="tag">{ability.state}</span></div>
+                  <p className="mt-2 text-xs leading-5 text-[#9a9da3]">{ability.description}</p>
+                  <button className={`btn mt-2 w-full px-2 ${ability.state === "unlocked" ? "" : "btn-primary"}`} type="button" onClick={() => void changeAbilityState(ability.id, ability.state === "unlocked" ? "sealed" : "unlocked")}>
+                    {ability.state === "unlocked" ? <ShieldAlert size={14} /> : <Sparkles size={14} />}
+                    {ability.state === "unlocked" ? "Selar habilidade" : "Liberar agora"}
+                  </button>
+                </article>)}
+                {selectedDetails.abilities.length === 0 && <p className="text-xs text-[#777a82]">Nenhuma habilidade cadastrada.</p>}
+              </div>}
+              {sheetTab === "rules" && <div className="mt-4 space-y-4">
+                <div><p className="eyebrow">perícias</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{selectedDetails.skills.map((skill) => <div className="rounded border border-[#30333a] p-2 text-xs" key={skill.id}><strong>{skill.name} +{skill.bonus}</strong><p className="mt-1 text-[#777a82]">{skill.attribute} · {skill.training}</p>{skill.notes && <p className="mt-2 text-[#a3a5ab]">{skill.notes}</p>}</div>)}</div></div>
+                <div><p className="eyebrow">ações</p><div className="mt-2 space-y-2">{selectedDetails.actions.map((action) => <div className="rounded border border-[#30333a] p-2 text-xs" key={action.id}><strong>{action.name}</strong><p className="mt-1 text-[#777a82]">{action.test} · {action.damage} · {action.range}</p>{action.description && <p className="mt-2 text-[#a3a5ab]">{action.description}</p>}</div>)}</div></div>
+                <div><p className="eyebrow">fraquezas</p><div className="mt-2 space-y-2">{selectedDetails.weaknesses.map((weakness) => <div className="rounded border border-[#5b3036] p-2 text-xs" key={weakness.id}><strong>{weakness.name}</strong><p className="mt-1 text-[#a08689]">{weakness.effect}</p></div>)}</div></div>
+              </div>}
+            </section>
+          )}
           <form className="panel rounded-lg p-5" onSubmit={deliver}>
             <div className="flex items-center gap-2">{deliveryKind === "item" ? <Package size={17} /> : <ScrollText size={17} />}<h2 className="font-extrabold">Entregar item ou pista</h2></div>
             <div className="mt-3 grid grid-cols-2 gap-2"><select className="field" value={deliveryKind} onChange={(event) => setDeliveryKind(event.target.value as "item" | "handout")}><option value="item">Item</option><option value="handout">Pista</option></select><select className="field" value={deliveryTarget} onChange={(event) => setDeliveryTarget(event.target.value as "selected" | "all")}><option value="selected">Somente {selected?.name}</option><option value="all">Todos os jogadores</option></select></div>
@@ -160,9 +253,10 @@ export function SessionHub({
           </form>
           <form className="panel rounded-lg p-5" onSubmit={sendMessage}>
             <div className="flex items-center gap-2"><MessageSquare size={17} /><h2 className="font-extrabold">Mensagem imediata</h2></div>
-            <div className="mt-3 grid grid-cols-2 gap-2"><select className="field" value={messageSender} onChange={(event) => setMessageSender(event.target.value)}>{senders.filter((sender) => sender.ativo).map((sender) => <option key={sender.id}>{sender.nome}</option>)}</select><select className="field" value={messageTarget} onChange={(event) => setMessageTarget(event.target.value as "selected" | "all")}><option value="selected">Somente {selected?.name}</option><option value="all">Todos</option></select></div>
-            <textarea required className="field mt-2 min-h-24" value={messageBody} onChange={(event) => setMessageBody(event.target.value)} placeholder="Mensagem privada; o remetente real continua protegido." />
-            <button className="btn btn-primary mt-2"><Send size={14} /> Enviar mensagem</button>
+            <div className="mt-3 grid grid-cols-2 gap-2"><select className="field" value={messageSender} onChange={(event) => { setMessageSender(event.target.value); setMessageReview(false); }}>{senders.filter((sender) => sender.ativo).map((sender) => <option key={sender.id}>{sender.nome}</option>)}</select><select className="field" value={messageTarget} onChange={(event) => { setMessageTarget(event.target.value as "selected" | "all"); setMessageReview(false); }}><option value="selected">Somente {selected?.name}</option><option value="all">Todos</option></select></div>
+            <textarea required className="field mt-2 min-h-24" value={messageBody} onChange={(event) => { setMessageBody(event.target.value); setMessageReview(false); }} placeholder="Mensagem privada; o remetente real continua protegido." />
+            {messageReview && <div className="mt-3 rounded border border-[#754049] bg-[#7d1a25]/10 p-3"><p className="eyebrow">prévia obrigatória</p><p className="mt-2 text-xs">De <strong>{messageSender}</strong> para <strong>{messageTarget === "all" ? "todos os jogadores vinculados" : selected?.name}</strong></p><p className="mt-2 whitespace-pre-wrap text-sm text-[#c2c4c9]">{messageBody}</p><button className="btn mt-3" type="button" onClick={() => setMessageReview(false)}>Continuar editando</button></div>}
+            <button className="btn btn-primary mt-2"><Send size={14} /> {messageReview ? "Confirmar envio" : "Revisar mensagem"}</button>
           </form>
           {notice && <p className="rounded border border-[#315b45] bg-[#153323]/30 p-3 text-xs text-[#7bd5a5]" role="status">{notice}</p>}
         </aside>

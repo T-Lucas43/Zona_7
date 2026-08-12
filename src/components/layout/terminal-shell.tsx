@@ -45,7 +45,7 @@ const getMasterLinks = (campaignId: string) =>
     [`/master/campaigns/${campaignId}/settings`, "Configurações", Settings],
   ] as const;
 
-const getPlayerLinks = (characterId: string, visibleSections: string[]) =>
+const getPlayerLinks = (characterId: string, visibleSections: string[], sessionId?: string) =>
   ([
     ["/app", "Início", Home],
     [`/app/characters/${characterId}`, "Minha ficha", CircleUserRound],
@@ -53,7 +53,7 @@ const getPlayerLinks = (characterId: string, visibleSections: string[]) =>
     [`/app/characters/${characterId}/abilities`, "Habilidades", Gauge],
     [`/app/characters/${characterId}/messages`, "Mensagens", Mail],
     [`/app/characters/${characterId}/handouts`, "Pistas", BookOpen],
-    ["/app/session/session-01", "Sala ao vivo", Dices],
+    ...(sessionId ? [[`/app/session/${sessionId}`, "Sala ao vivo", Dices] as const] : []),
   ] as const).filter(([href]) => {
     const section = href.match(/\/characters\/[^/]+\/([^/]+)/)?.[1];
     return !section || visibleSections.includes(section);
@@ -68,12 +68,12 @@ export function TerminalShell({
   user: AuthenticatedUser;
   area: "master" | "player";
   children: React.ReactNode;
-  playerNavigation?: { characterId: string; visibleSections: string[] };
+  playerNavigation?: { characterId: string; visibleSections: string[]; sessionId?: string };
 }) {
   const pathname = usePathname();
   const campaignId = pathname.match(/\/master\/campaigns\/([^/]+)/)?.[1] ?? defaultCampaignId;
   const characterId = playerNavigation?.characterId ?? pathname.match(/\/app\/characters\/([^/]+)/)?.[1] ?? "davi";
-  const links = area === "master" ? getMasterLinks(campaignId) : getPlayerLinks(characterId, playerNavigation?.visibleSections ?? []);
+  const links = area === "master" ? getMasterLinks(campaignId) : getPlayerLinks(characterId, playerNavigation?.visibleSections ?? [], playerNavigation?.sessionId);
   const mobileLinks = area === "master" ? links.slice(0, 5) : links.slice(1, 6);
   const isActive = (href: string) => {
     if (href === "/master" || href === "/app") return pathname === href;

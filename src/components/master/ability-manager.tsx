@@ -134,7 +134,12 @@ export function AbilityManager({
                 <KeyRound size={11} /> {nomeEstado(habilidade.state)}
               </span>
             </div>
-            <p className="mt-3 text-sm leading-6 text-[#a4a6ac]">{habilidade.description}</p>
+            <div className="mt-3 rounded border border-[#30333a] bg-black/25 p-3">
+              <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
+                Informações da habilidade
+              </span>
+              <p className="mt-2 text-sm leading-6 text-[#a4a6ac]">{habilidade.description}</p>
+            </div>
             <label className="mt-3 block text-xs font-bold text-[#a3a5ab]">
               Estado visível ao jogador
               <select

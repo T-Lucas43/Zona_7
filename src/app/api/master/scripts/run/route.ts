@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isSupabaseConfigured } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import { requireCampaignMaster } from "@/server/services/master-access";
+import { getScriptRunSnapshot } from "@/server/repositories/script-repository";
 
 const schema = z.object({
   campaignId: z.string().uuid(),
@@ -47,7 +48,9 @@ export async function POST(request: Request) {
       p_idempotency_key: input.idempotencyKey,
     });
     if (error) throw new Error(error.message);
-    return NextResponse.json(data);
+    const result = data as { runId?: string };
+    const snapshot = result.runId ? await getScriptRunSnapshot(result.runId) : null;
+    return NextResponse.json(snapshot ? { ...data, ...snapshot } : data);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha no controle do roteiro." },
