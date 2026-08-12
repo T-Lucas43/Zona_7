@@ -1,11 +1,24 @@
 {
   "name": "Zona 7 - Terminal",
   "short_name": "Zona 7",
-  "description": "Terminal narrativo para campanhas de Zona 7.",
+  "id": "/app",
+  "description": "Ficha, mensagens, pistas e sessão ao vivo da campanha Zona 7.",
   "start_url": "/app",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "background_color": "#08090b",
   "theme_color": "#08090b",
   "lang": "pt-BR",
-  "orientation": "portrait-primary"
+  "orientation": "any",
+  "categories": ["games", "entertainment", "utilities"],
+  "icons": [
+    { "src": "/zona7-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/zona7-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/zona7-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/zona7-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Minha ficha", "short_name": "Ficha", "url": "/app" }
+  ]
 }

@@ -7,7 +7,12 @@ export async function POST(request: Request) {
   try {
     const input = sessionControlSchema.parse(await request.json());
     const user = await requireCampaignMaster(input.campaignId);
-    if (user.demo) return NextResponse.json({ demo: true, status: input.action });
+    if (user.demo) return NextResponse.json({
+      demo: true,
+      status: input.action === "pause" ? "paused" : input.action === "end" ? "ended" : "active",
+      elapsedSeconds: 0,
+      timerStartedAt: ["start", "resume", "reopen", "restart"].includes(input.action) ? new Date().toISOString() : null,
+    });
     let result;
     if (input.action === "advance") {
       result = await advanceSessionTurnSynced({

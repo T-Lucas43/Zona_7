@@ -338,7 +338,7 @@ export async function controlSessionRuntime(input: {
   campaignId: string;
   sessionId: string;
   actorUserId: string;
-  action: "start" | "pause" | "resume" | "end";
+  action: "start" | "pause" | "resume" | "reopen" | "restart" | "end";
   idempotencyKey: string;
 }) {
   const supabase = await clientOrDemo();

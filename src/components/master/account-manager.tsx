@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { KeyRound, Link2, MailPlus, PauseCircle, PlayCircle, ShieldCheck, UserPlus } from "lucide-react";
+import { Fragment, useState } from "react";
+import { KeyRound, Link2, MailPlus, PauseCircle, Pencil, PlayCircle, Save, ShieldCheck, Trash2, TriangleAlert, UserPlus, X } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { ContaDaCampanha } from "@/server/repositories/master-repository";
 import type { CharacterSummary } from "@/types/domain";
@@ -11,6 +11,16 @@ function dataAcesso(valor: string | null) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(
     new Date(valor),
   );
+}
+
+function roleValue(label: string) {
+  if (label === "Mestre auxiliar") return "co_master";
+  if (label === "Espectador") return "spectator";
+  return "player";
+}
+
+function isProtectedAccount(account: ContaDaCampanha) {
+  return account.papel === "Responsável pela campanha" || account.papel === "Mestre";
 }
 
 export function AccountManager({
@@ -30,14 +40,29 @@ export function AccountManager({
   const [modo, setModo] = useState<"create" | "invite">("create");
   const [senhaTemporaria, setSenhaTemporaria] = useState("");
   const [personagemId, setPersonagemId] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPapel, setEditPapel] = useState<"player" | "co_master" | "spectator">("player");
   const [assignments, setAssignments] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       initialAccounts.map((account) => [
         account.membroId,
-        characters.find((character) => character.name === account.personagem)?.id ?? "",
+        account.personagemId ?? "",
       ]),
     ),
   );
+
+  function editar(conta: ContaDaCampanha) {
+    setEditingId(conta.membroId);
+    setDeletingId(null);
+    setEditNome(conta.nome);
+    setEditEmail(conta.email);
+    setEditPapel(roleValue(conta.papel));
+    setAviso("");
+  }
 
   function gerarSenha() {
     const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
@@ -46,13 +71,15 @@ export function AccountManager({
   }
 
   async function agir(conta: ContaDaCampanha, action: "reset" | "suspend" | "activate") {
+    setPendingId(conta.membroId);
     setAviso("");
     const response = await fetch("/api/master/accounts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaignId, memberId: conta.membroId, email: conta.email, action }),
+      body: JSON.stringify({ campaignId, memberId: conta.membroId, userId: conta.usuarioId, action }),
     });
     const result = (await response.json()) as { error?: string };
+    setPendingId(null);
     if (!response.ok) return setAviso(result.error ?? "Não foi possível concluir a ação.");
     if (action !== "reset") {
       setContas((atual) =>
@@ -138,6 +165,8 @@ export function AccountManager({
   }
 
   async function salvarVinculo(conta: ContaDaCampanha) {
+    setPendingId(conta.membroId);
+    setAviso("");
     const characterId = assignments[conta.membroId] || null;
     const character = characters.find((item) => item.id === characterId);
     const response = await fetch("/api/master/accounts", {
@@ -152,13 +181,68 @@ export function AccountManager({
       }),
     });
     const result = (await response.json()) as { error?: string; characterName?: string | null };
+    setPendingId(null);
     if (!response.ok) return setAviso(result.error ?? "Não foi possível atualizar o vínculo.");
     setContas((current) => current.map((item) =>
       item.membroId === conta.membroId
-        ? { ...item, personagem: result.characterName ?? character?.name ?? null }
+        ? { ...item, personagem: result.characterName ?? character?.name ?? null, personagemId: characterId }
         : item,
     ));
     setAviso(character ? `${character.name} foi atribuído à conta de ${conta.nome}.` : `A ficha foi removida da conta de ${conta.nome}.`);
+  }
+
+  async function salvarUsuario(conta: ContaDaCampanha) {
+    setPendingId(conta.membroId);
+    setAviso("");
+    const response = await fetch("/api/master/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "edit",
+        campaignId,
+        memberId: conta.membroId,
+        userId: conta.usuarioId,
+        displayName: editNome,
+        email: editEmail,
+        role: editPapel,
+      }),
+    });
+    const result = (await response.json()) as { error?: string; displayName?: string; email?: string; roleLabel?: string };
+    setPendingId(null);
+    if (!response.ok) return setAviso(result.error ?? "Não foi possível editar o usuário.");
+    setContas((current) => current.map((item) => item.membroId === conta.membroId ? {
+      ...item,
+      nome: result.displayName ?? editNome,
+      email: result.email ?? editEmail,
+      papel: result.roleLabel ?? (editPapel === "co_master" ? "Mestre auxiliar" : editPapel === "spectator" ? "Espectador" : "Jogador"),
+      personagem: editPapel === "player" ? item.personagem : null,
+      personagemId: editPapel === "player" ? item.personagemId : null,
+    } : item));
+    if (editPapel !== "player") setAssignments((current) => ({ ...current, [conta.membroId]: "" }));
+    setEditingId(null);
+    setAviso(`Os dados de ${editNome} foram atualizados.`);
+  }
+
+  async function excluirUsuario(conta: ContaDaCampanha) {
+    setPendingId(conta.membroId);
+    setAviso("");
+    const response = await fetch("/api/master/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", campaignId, memberId: conta.membroId, userId: conta.usuarioId }),
+    });
+    const result = (await response.json()) as { error?: string; accountDeleted?: boolean; warning?: string | null };
+    setPendingId(null);
+    if (!response.ok) return setAviso(result.error ?? "Não foi possível excluir o usuário.");
+    setContas((current) => current.filter((item) => item.membroId !== conta.membroId));
+    setAssignments((current) => {
+      const next = { ...current };
+      delete next[conta.membroId];
+      return next;
+    });
+    setDeletingId(null);
+    setEditingId(null);
+    setAviso(result.warning ?? (result.accountDeleted ? `A conta de ${conta.nome} e todos os acessos foram excluídos.` : `${conta.nome} foi removido desta campanha e perdeu todos os acessos a ela.`));
   }
 
   return (
@@ -191,8 +275,12 @@ export function AccountManager({
               {contas.map((conta) => {
                 const suspenso = conta.situacao.toLowerCase().includes("susp");
                 const linkedCharacter = characters.find((character) => character.name === conta.personagem);
+                const protectedAccount = isProtectedAccount(conta);
+                const isPending = pendingId === conta.membroId;
+                const pendingInvite = conta.situacao.toLowerCase().includes("convite");
                 return (
-                  <tr className="border-t border-[#292c32]" key={conta.membroId}>
+                  <Fragment key={conta.membroId}>
+                  <tr className="border-t border-[#292c32]">
                     <td className="p-3">
                       <strong>{conta.nome}</strong>
                       <p className="mt-1 text-xs text-[#777a82]">
@@ -200,7 +288,7 @@ export function AccountManager({
                       </p>
                     </td>
                     <td className="p-3 text-[#a3a5ab]">
-                      {conta.papel === "Jogador" ? <div className="flex min-w-[235px] items-center gap-2">
+                      {conta.papel === "Jogador" && !pendingInvite ? <div className="flex min-w-[235px] items-center gap-2">
                         {linkedCharacter && <CharacterPortrait name={linkedCharacter.name} portraitUrl={linkedCharacter.portraitUrl} className="size-9 rounded-full" />}
                         <select className="field min-w-0 flex-1 py-2" aria-label={`Personagem de ${conta.nome}`} value={assignments[conta.membroId] ?? ""} onChange={(event) => setAssignments((current) => ({ ...current, [conta.membroId]: event.target.value }))}>
                           <option value="">Sem personagem</option>
@@ -209,8 +297,8 @@ export function AccountManager({
                             return <option value={character.id} disabled={Boolean(owner)} key={character.id}>{character.name}{owner ? " — já atribuído" : ""}</option>;
                           })}
                         </select>
-                        <button className="btn px-3" type="button" title="Salvar vínculo" aria-label={`Salvar personagem de ${conta.nome}`} onClick={() => void salvarVinculo(conta)}><Link2 size={14} /></button>
-                      </div> : <span>Não se aplica</span>}
+                        <button className="btn px-3" type="button" title="Salvar personagem atribuído" aria-label={`Salvar personagem de ${conta.nome}`} onClick={() => void salvarVinculo(conta)} disabled={isPending}><Link2 size={14} /> Salvar</button>
+                      </div> : <span>{pendingInvite ? "Aguardando aceite" : "Não se aplica"}</span>}
                     </td>
                     <td className="p-3">
                       <span className="tag">
@@ -220,26 +308,49 @@ export function AccountManager({
                     </td>
                     <td className="p-3 text-xs text-[#8f9299]">{dataAcesso(conta.ultimoAcesso)}</td>
                     <td className="p-3">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        {pendingInvite && <span className="text-xs text-[#8f9299]">A conta será gerenciável após o aceite.</span>}
+                        {!pendingInvite && <>
                         <button
                           className="btn px-2 py-2"
                           type="button"
                           title="Enviar redefinição de senha"
                           onClick={() => void agir(conta, "reset")}
+                          disabled={isPending}
                         >
                           <KeyRound size={14} />
                         </button>
-                        <button
+                        {!protectedAccount && <button
                           className="btn px-2 py-2"
                           type="button"
                           title={suspenso ? "Reativar acesso" : "Suspender acesso"}
                           onClick={() => void agir(conta, suspenso ? "activate" : "suspend")}
+                          disabled={isPending}
                         >
                           {suspenso ? <PlayCircle size={14} /> : <PauseCircle size={14} />}
-                        </button>
+                        </button>}
+                        {!protectedAccount && <button className="btn px-2 py-2" type="button" title="Editar usuário" onClick={() => editar(conta)} disabled={isPending}><Pencil size={14} /></button>}
+                        {!protectedAccount && deletingId !== conta.membroId && <button className="btn px-2 py-2 text-[#ef7f89]" type="button" title="Excluir usuário" onClick={() => { setDeletingId(conta.membroId); setEditingId(null); }} disabled={isPending}><Trash2 size={14} /></button>}
+                        {deletingId === conta.membroId && <>
+                          <button className="btn border-[#7a3039] bg-[#731722]/25 px-2 py-2 text-[#f6a4ad]" type="button" title="Confirmar exclusão" onClick={() => void excluirUsuario(conta)} disabled={isPending}><TriangleAlert size={14} /> Confirmar</button>
+                          <button className="btn px-2 py-2" type="button" title="Cancelar exclusão" onClick={() => setDeletingId(null)} disabled={isPending}><X size={14} /></button>
+                        </>}
+                        </>}
                       </div>
                     </td>
                   </tr>
+                  {editingId === conta.membroId && <tr className="border-t border-[#493238] bg-[#6f1822]/8">
+                    <td className="p-4" colSpan={5}>
+                      <form className="grid gap-3 lg:grid-cols-[1fr_1.3fr_0.8fr_auto]" onSubmit={(event) => { event.preventDefault(); void salvarUsuario(conta); }}>
+                        <label className="text-xs font-bold">Nome<input required minLength={2} className="field mt-1" value={editNome} onChange={(event) => setEditNome(event.target.value)} /></label>
+                        <label className="text-xs font-bold">E-mail<input required type="email" className="field mt-1" value={editEmail} onChange={(event) => setEditEmail(event.target.value)} /></label>
+                        <label className="text-xs font-bold">Papel<select className="field mt-1" value={editPapel} onChange={(event) => setEditPapel(event.target.value as typeof editPapel)}><option value="player">Jogador</option><option value="co_master">Mestre auxiliar</option><option value="spectator">Espectador</option></select></label>
+                        <div className="flex items-end gap-2"><button className="btn btn-primary" type="submit" disabled={isPending}><Save size={14} /> Salvar usuário</button><button className="btn px-3" type="button" aria-label="Cancelar edição" onClick={() => setEditingId(null)} disabled={isPending}><X size={14} /></button></div>
+                      </form>
+                      {editPapel !== "player" && <p className="mt-2 text-xs text-[#c69a78]">Ao salvar como mestre auxiliar ou espectador, qualquer personagem atribuído será removido desta conta.</p>}
+                    </td>
+                  </tr>}
+                  </Fragment>
                 );
               })}
             </tbody>

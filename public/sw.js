@@ -1,4 +1,4 @@
-const CACHE = "zona7-shell-v1";
+const CACHE = "zona7-shell-v2";
 const SHELL = ["/", "/login", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -7,14 +7,14 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("zona7-shell-") && key !== CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(
-    fetch(event.request).catch(() =>
-      caches.match(event.request).then((response) => response || caches.match("/")),
-    ),
-  );
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(fetch(event.request).catch(() => caches.match("/")));
 });

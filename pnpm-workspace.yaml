@@ -1,5 +1,6 @@
 allowBuilds:
   esbuild: true
+  sharp: true
   unrs-resolver: true
 minimumReleaseAgeExclude:
   - "@supabase/auth-js@2.112.3"

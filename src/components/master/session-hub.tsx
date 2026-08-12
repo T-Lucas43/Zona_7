@@ -2,16 +2,17 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare, Package, Radio, ScrollText, Send, ShieldAlert, Sparkles, Swords, UserRound, Users } from "lucide-react";
+import { ArrowRight, Backpack, BookOpen, Eye, EyeOff, HeartPulse, MessageSquare, Package, Radio, ScrollText, Send, ShieldAlert, Sparkles, Swords, UserRound, Users } from "lucide-react";
 import { LiveSync } from "@/components/live-sync";
 import { CharacterPortrait } from "@/components/character/character-portrait";
+import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
 import { MapStudio } from "@/components/master/map-studio";
 import { SessionControls } from "@/components/master/session-controls";
 import { SessionClock } from "@/components/master/session-clock";
 import { SessionScriptControl } from "@/components/master/session-script-control";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
-import type { CenaDaCampanha, ContaDaCampanha, Remetente, RoteiroDaCampanha } from "@/server/repositories/master-repository";
+import type { AtorDaCampanha, CenaDaCampanha, ContaDaCampanha, EncontroDaCampanha, Remetente, RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionPublicState } from "@/server/repositories/session-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
 import type { SessionCharacterDetails } from "@/server/repositories/character-repository";
@@ -19,7 +20,7 @@ import type { SessionCharacterDetails } from "@/server/repositories/character-re
 const resourceLabels: Record<ResourceKind, string> = { pv: "PV", pe: "PE", san: "SAN" };
 
 export function SessionHub({
-  campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, visibleCharacterIds,
+  campaignId, session, initialPublicState, initialCharacters, characterDetails, scene, accounts, senders, scripts, initialScriptRun, encounters, actors, visibleCharacterIds,
 }: {
   campaignId: string;
   session: SessionSummary;
@@ -31,6 +32,8 @@ export function SessionHub({
   senders: Remetente[];
   scripts: RoteiroDaCampanha[];
   initialScriptRun: SessionScriptRun | null;
+  encounters: EncontroDaCampanha[];
+  actors: AtorDaCampanha[];
   visibleCharacterIds: string[];
 }) {
   const [characters, setCharacters] = useState(initialCharacters);
@@ -54,6 +57,8 @@ export function SessionHub({
   const selected = useMemo(() => characters.find((item) => item.id === selectedId) ?? characters[0], [characters, selectedId]);
   const selectedDetails = details.find((item) => item.characterId === selected?.id);
   const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
+  const featuredEncounter = encounters.find((encounter) => ["active", "paused"].includes(encounter.estado)) ?? encounters[0];
+  const sceneActors = actors.filter((actor) => actor.naCena);
 
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
@@ -158,6 +163,28 @@ export function SessionHub({
           <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
         </div>
       </div>
+      <section className="mt-4 grid gap-4 md:grid-cols-2" aria-label="Operações da sessão">
+        <Link className="panel central-card group rounded-lg p-5" href={`/master/campaigns/${campaignId}/encounters`}>
+          <div className="flex items-start justify-between gap-4">
+            <span className="grid size-11 place-items-center rounded-lg bg-[#8a1b27]/25 text-[#ff7784]"><Swords size={20} /></span>
+            <span className="tag">{encounters.length} cadastrado(s)</span>
+          </div>
+          <div className="mt-5 flex items-end justify-between gap-4">
+            <div><p className="eyebrow">controle de combate</p><h2 className="mt-1 text-xl font-extrabold">Encontros</h2><p className="mt-2 text-sm text-[#92959c]">{featuredEncounter ? `${featuredEncounter.nome} · rodada ${featuredEncounter.rodada} · ${featuredEncounter.participantes} participantes` : "Crie o primeiro encontro da sessão."}</p></div>
+            <ArrowRight className="shrink-0 text-[#d84b57] transition-transform group-hover:translate-x-1" size={19} />
+          </div>
+        </Link>
+        <Link className="panel central-card group rounded-lg p-5" href={`/master/campaigns/${campaignId}/actors`}>
+          <div className="flex items-start justify-between gap-4">
+            <span className="grid size-11 place-items-center rounded-lg bg-[#5f3a8b]/25 text-[#b993ef]"><Sparkles size={20} /></span>
+            <span className="tag">{sceneActors.length} em cena</span>
+          </div>
+          <div className="mt-5 flex items-end justify-between gap-4">
+            <div className="min-w-0"><p className="eyebrow">elenco do mestre</p><h2 className="mt-1 text-xl font-extrabold">Entidades e NPCs</h2><div className="mt-3 flex items-center -space-x-2">{actors.slice(0, 5).map((actor) => <CharacterPortrait name={actor.nome} portraitUrl={actor.portraitUrl} className="size-9 rounded-full border-2 border-[#111318]" key={actor.id} />)}{actors.length === 0 && <p className="text-sm text-[#92959c]">Nenhuma entidade cadastrada.</p>}</div></div>
+            <ArrowRight className="shrink-0 text-[#a67ae0] transition-transform group-hover:translate-x-1" size={19} />
+          </div>
+        </Link>
+      </section>
       <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-4">
           <SessionScriptControl campaignId={campaignId} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} />
@@ -217,6 +244,7 @@ export function SessionHub({
                   <button className={`btn px-2 ${sheetTab === value ? "border-[#a83a45] bg-[#8a1b27]/20" : ""}`} type="button" key={value} onClick={() => setSheetTab(value)}><Icon size={14} /> {label}</button>
                 ))}
               </div>
+              <div className="mt-3"><CharacterPdfActions characterId={selected.id} compact /></div>
               {sheetTab === "summary" && <div className="mt-4 space-y-3">
                 <div className="grid grid-cols-3 gap-2">{Object.values(selected.resources).map((item) => <div className="rounded border border-[#30333a] p-2 text-center" key={item.kind}><span className="text-[0.6rem] uppercase text-[#777a82]">{item.kind}</span><strong className="block">{item.current}/{item.maximum}</strong></div>)}</div>
                 <div className="grid grid-cols-5 gap-1">{Object.entries(selected.attributes).map(([key, value]) => <div className="rounded border border-[#30333a] p-2 text-center" key={key}><span className="text-[0.55rem] uppercase text-[#777a82]">{key}</span><strong className="block text-sm">{value}</strong></div>)}</div>

@@ -566,6 +566,13 @@ select {
 
 .central-card:hover::after { transform: translateX(120%); }
 
+.pwa-install-card {
+  background:
+    radial-gradient(circle at 92% 8%, rgba(181, 37, 50, 0.18), transparent 18rem),
+    linear-gradient(145deg, rgba(21, 23, 29, 0.98), rgba(10, 11, 14, 0.98));
+  animation: central-card-enter 360ms ease-out both;
+}
+
 @keyframes central-card-enter {
   from { opacity: 0; transform: translateY(10px) scale(0.985); }
 }

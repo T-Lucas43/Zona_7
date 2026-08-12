@@ -4,6 +4,7 @@ import { CharacterCard } from "@/components/character/character-card";
 import { DiceRoller } from "@/components/dice/dice-roller";
 import { LiveSync } from "@/components/live-sync";
 import { NotificationCenter } from "@/components/player/notification-center";
+import { PwaInstallCard } from "@/components/player/pwa-install-card";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAuthorizedCharacters, getAuthorizedNotifications } from "@/server/repositories/character-repository";
@@ -89,6 +90,7 @@ export default async function PlayerHomePage() {
         </div>
         <NotificationCenter initial={notifications} authorizedCharacterIds={characters.map((item) => item.id)} />
       </section>
+      <div className="mt-6"><PwaInstallCard /></div>
     </div>
   );
 }

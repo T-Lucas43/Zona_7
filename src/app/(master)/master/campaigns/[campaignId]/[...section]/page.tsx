@@ -2,6 +2,7 @@ import { CheckCircle2, Shield } from "lucide-react";
 import { notFound } from "next/navigation";
 import { CharacterCard } from "@/components/character/character-card";
 import { CharacterPortrait } from "@/components/character/character-portrait";
+import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
 import { ResourceBars } from "@/components/character/resource-bars";
 import { AbilityManager } from "@/components/master/ability-manager";
 import { AccountManager } from "@/components/master/account-manager";
@@ -83,7 +84,7 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
       </div>
     );
   }
-  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis, execucaoRoteiro] = await Promise.all([
+  const [elenco, cena, contas, remetentes, roteiros, estadoPublico, atoresVisiveis, execucaoRoteiro, encontros, atores] = await Promise.all([
     getSessionCharacters(campaignId, session.id),
     getCenaPrincipal(campaignId),
     getContasDaCampanha(campaignId, false),
@@ -92,6 +93,8 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
     getSessionPublicState(campaignId, session.id),
     getSessionCast(campaignId),
     getSessionScriptRun(session.id),
+    getEncontros(campaignId),
+    getAtores(campaignId),
   ]);
   const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
   return (
@@ -106,6 +109,8 @@ async function SessionConsole({ campaignId, sessionId }: { campaignId: string; s
       senders={remetentes}
       scripts={roteiros.filter((roteiro) => roteiro.estado === "published" || roteiro.estado === "Publicado")}
       initialScriptRun={execucaoRoteiro}
+      encounters={encontros}
+      actors={atores}
       visibleCharacterIds={atoresVisiveis.flatMap((ator) => ator.characterId && elenco.some((character) => character.id === ator.characterId) ? [ator.characterId] : [])}
     />
   );
@@ -123,8 +128,10 @@ async function CharacterEditor({ campaignId, id }: { campaignId: string; id: str
   ]);
   return (
     <div>
-      <p className="eyebrow">ficha completa // concorrência otimista</p>
-      <h1 className="mt-1 text-3xl font-black">{character.name}</h1>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><p className="eyebrow">ficha completa // concorrência otimista</p><h1 className="mt-1 text-3xl font-black">{character.name}</h1></div>
+        <CharacterPdfActions characterId={character.id} />
+      </div>
       <div className="mt-6 grid gap-4 xl:grid-cols-[0.72fr_1.35fr_0.85fr]">
         <aside className="panel rounded-lg p-4">
           <p className="eyebrow">elenco</p>

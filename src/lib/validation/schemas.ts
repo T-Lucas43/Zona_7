@@ -112,7 +112,7 @@ export const sessionPublicStateSchema = z.object({
 export const sessionControlSchema = z.object({
   campaignId: z.uuid(),
   sessionId: z.string().min(2),
-  action: z.enum(["start", "pause", "resume", "advance", "end"]),
+  action: z.enum(["start", "pause", "resume", "reopen", "restart", "advance", "end"]),
 });
 
 const characterSheetFields = [

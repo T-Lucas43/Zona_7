@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ResourceBars } from "@/components/character/resource-bars";
 import { CharacterPortrait } from "@/components/character/character-portrait";
+import { CharacterPdfActions } from "@/components/character/character-pdf-actions";
 import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
 import { getAuthorizedCharacter } from "@/server/repositories/character-repository";
 
@@ -63,9 +64,10 @@ export default async function CharacterPage({
                 {isCharacterFieldVisible(character, "role") && <p className="mt-2 text-xs text-[#777a82]">{character.role}</p>}
               </div>
             </div>
-            {isCharacterFieldVisible(character, "status") && <span className="tag border-[#5d3036] text-[#e9979f]">
-              STATUS: {character.status.toUpperCase()}
-            </span>}
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              {isCharacterFieldVisible(character, "status") && <span className="tag border-[#5d3036] text-[#e9979f]">STATUS: {character.status.toUpperCase()}</span>}
+              <CharacterPdfActions characterId={character.id} compact />
+            </div>
           </div>
         </div>
         <div className="grid gap-7 p-5 sm:p-7 lg:grid-cols-[0.85fr_1.15fr]">

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#08090b"/>
+  <path d="M256 46 447 256 256 466 65 256Z" fill="#7d1a25" stroke="#ef6573" stroke-width="12"/>
+  <path d="M256 86 407 256 256 426 105 256Z" fill="#13151a" stroke="#a92a37" stroke-width="5"/>
+  <text x="256" y="284" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="116" font-weight="900" fill="#fff">Z7</text>
+  <path d="M166 326h180" stroke="#ef6573" stroke-width="8" stroke-linecap="round"/>
+</svg>

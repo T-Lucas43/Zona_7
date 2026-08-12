@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { CommandPalette } from "@/components/master/command-palette";
+import { PwaInstallCard } from "@/components/player/pwa-install-card";
 import { signOutAction } from "@/server/actions/auth";
 import type { AuthenticatedUser } from "@/types/domain";
 
@@ -107,6 +108,7 @@ export function TerminalShell({
               Encerrar terminal
             </button>
           </form>
+          {area === "player" && <PwaInstallCard compact />}
         </div>
       </aside>
       <main id="conteudo" className="app-main">
