@@ -191,6 +191,7 @@ export function SessionHub({
           <SessionControls initialTurn={session.round} campaignId={campaignId} sessionId={session.id} initialStatus={session.status} />
         </div>
       </div>
+      <div className="mt-4"><SessionScriptControl key={scripts.map((script) => `${script.id}:${script.versao}`).join("|")} campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} /></div>
       <div className="mt-4 grid items-start gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-3">
           <MapStudio
@@ -216,7 +217,6 @@ export function SessionHub({
         </aside>
       </div>
       <SessionOperations campaignId={campaignId} sessionId={session.id} scene={scene} initialEncounters={encounters} initialActors={actors} initialRequests={initialAbilityRequests} />
-      <div className="mt-4"><SessionScriptControl key={scripts.map((script) => `${script.id}:${script.versao}`).join("|")} campaignId={campaignId} sessionId={session.id} sessionStatus={session.status} scripts={scripts} initialRun={initialScriptRun} /></div>
       <div className="mt-4 grid gap-4 2xl:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-4">
           <section className="panel rounded-lg p-5">
