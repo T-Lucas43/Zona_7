@@ -10,6 +10,7 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Trash2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -226,20 +227,47 @@ export function MapStudio({
     });
     const result = (await response.json()) as { error?: string };
     if (!response.ok) return setAviso(result.error ?? "Falha ao entregar item.");
+    const removed = await removeMapItemToken(
+      token,
+      `“${item.nome}” foi entregue a ${recipient.name}; o jogador recebeu a notificação.`,
+      "Item entregue, mas não foi removido do mapa.",
+    );
+    if (!removed) return;
+  }
+
+  async function removeMapItemToken(
+    token: CenaDaCampanha["tokens"][number],
+    successMessage: string,
+    errorMessage = "Não foi possível remover o item do mapa.",
+  ) {
     const removeResponse = await fetch("/api/master/map/tokens", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "remove_item", campaignId, tokenId: token.id }),
     });
     const removeResult = (await removeResponse.json()) as { error?: string };
-    if (!removeResponse.ok)
-      return setAviso(removeResult.error ?? "Item entregue, mas não foi removido do mapa.");
+    if (!removeResponse.ok) {
+      setAviso(removeResult.error ?? errorMessage);
+      return false;
+    }
     setCena((current) => ({
       ...current,
       tokens: current.tokens.filter((value) => value.id !== token.id),
     }));
     setSelectedItemTokenId("");
-    setAviso(`“${item.nome}” foi entregue a ${recipient.name}; o jogador recebeu a notificação.`);
+    if (selecionado === token.id) setSelecionado("");
+    setAviso(successMessage);
+    return true;
+  }
+
+  async function removeSelectedMapItem() {
+    const token = cena.tokens.find((value) => value.id === selectedItemTokenId);
+    const item = items.find((value) => value.id === token?.itemId);
+    if (!token || !item) return setAviso("Selecione um item no mapa para removê-lo.");
+    await removeMapItemToken(
+      token,
+      `“${item.nome}” foi removido do mapa. O item continua disponível no catálogo.`,
+    );
   }
   async function enviarMapa(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -508,7 +536,7 @@ export function MapStudio({
                 <h3 className="mt-3 font-extrabold">Itens no mapa</h3>
                 <p className="mt-2 text-xs leading-5 text-[#858890]">
                   Escolha um item e toque no ponto exato do mapa. Depois toque no item para
-                  entregá-lo.
+                  entregá-lo ou removê-lo da cena.
                 </p>
                 <label className="mt-3 block text-xs font-bold">
                   Item do catálogo
@@ -572,6 +600,13 @@ export function MapStudio({
                       onClick={() => void deliverMapItem()}
                     >
                       <Gift size={14} /> Entregar e remover do mapa
+                    </button>
+                    <button
+                      className="btn mt-2 w-full border-[#682d35] text-[#f0949d]"
+                      type="button"
+                      onClick={() => void removeSelectedMapItem()}
+                    >
+                      <Trash2 size={14} /> Remover do mapa
                     </button>
                   </div>
                 )}
