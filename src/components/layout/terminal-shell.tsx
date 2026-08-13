@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Archive,
+  ArrowLeft,
   BadgeHelp,
   BookOpen,
   Boxes,
@@ -18,10 +19,12 @@ import {
   Map,
   Menu,
   MessageSquare,
+  MoreHorizontal,
   NotebookPen,
   PanelLeftClose,
   PanelLeftOpen,
   Radio,
+  Search,
   ScrollText,
   Settings,
   Sparkles,
@@ -93,6 +96,7 @@ export function TerminalShell({
   notifications?: PlayerNotification[];
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const sessionWorkspace = area === "master" && pathname.includes("/sessions");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(sessionWorkspace);
@@ -111,6 +115,18 @@ export function TerminalShell({
     if (href === "/master" || href === "/app") return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   };
+  const activeLabel =
+    links.find(([href]) => isActive(href))?.[1] ??
+    (area === "master" ? "Visão geral" : "Início");
+  const playerSheetHref = `/app/characters/${characterId}`;
+  const playerMessagesHref = `${playerSheetHref}/messages`;
+  const playerSessionHref = playerNavigation?.sessionId
+    ? `/app/session/${playerNavigation.sessionId}`
+    : "/app";
+  const canGoBack = pathname !== "/master" && pathname !== "/app";
+  function openCommandPalette() {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }));
+  }
   return (
     <div
       className="app-frame terminal-grid"
@@ -170,18 +186,41 @@ export function TerminalShell({
       </aside>
       <main id="conteudo" className="app-main">
         <header className="app-topbar">
-          <div>
-            <p className="eyebrow">
-              {area === "master" ? "console do mestre" : "terminal do sobrevivente"}
-            </p>
+          <div className="app-topbar-context">
+            {canGoBack && (
+              <button
+                className="mobile-back-button"
+                type="button"
+                onClick={() => router.back()}
+                aria-label="Voltar para a tela anterior"
+              >
+                <ArrowLeft size={18} />
+              </button>
+            )}
+            {area === "player" && <Brand compact />}
+            <div className="app-topbar-breadcrumb">
+              <span>{area === "master" ? "Zona 7 / A Convergência" : "Terminal seguro"}</span>
+              <strong>{activeLabel}</strong>
+            </div>
           </div>
+          {area === "master" && (
+            <button className="topbar-command-search" type="button" onClick={openCommandPalette}>
+              <Search size={16} />
+              <span>Buscar comando, personagem ou regra...</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+          )}
+          {area === "player" && (
+            <div className="player-channel-state" aria-label="Canal conectado">
+              <span className="status-dot" /> conectado
+            </div>
+          )}
           <div className="app-topbar-actions flex items-center gap-2">
-            <NotificationBell initial={notifications} userId={user.id} />
-            <UserProfileMenu user={user} showInstall={area === "player"} />
-            <span className="tag mobile-topbar-status">
+            <span className="tag desktop-channel-status">
               <span className="status-dot" /> Canal seguro
             </span>
-            <span className="tag mobile-topbar-time hidden sm:inline-flex">Belém · UTC−3</span>
+            <NotificationBell initial={notifications} userId={user.id} />
+            <UserProfileMenu user={user} showInstall={area === "player"} />
             <button
               className="mobile-menu-trigger"
               type="button"
@@ -196,6 +235,25 @@ export function TerminalShell({
         </header>
         {children}
       </main>
+      {area === "player" && (
+        <nav className="player-bottom-nav" aria-label="Atalhos principais do jogador">
+          <Link href="/app" data-active={isActive("/app")}>
+            <Home size={19} /><span>Início</span>
+          </Link>
+          <Link href={playerSheetHref} data-active={isActive(playerSheetHref)}>
+            <CircleUserRound size={19} /><span>Ficha</span>
+          </Link>
+          <Link href={playerSessionHref} data-active={isActive(playerSessionHref)}>
+            <Radio size={19} /><span>Sala</span>
+          </Link>
+          <Link href={playerMessagesHref} data-active={isActive(playerMessagesHref)}>
+            <MessageSquare size={19} /><span>Mensagens</span>
+          </Link>
+          <button type="button" onClick={() => setMobileMenuOpen(true)} aria-expanded={mobileMenuOpen}>
+            <MoreHorizontal size={20} /><span>Mais</span>
+          </button>
+        </nav>
+      )}
       {mobileMenuOpen && (
         <>
           <button

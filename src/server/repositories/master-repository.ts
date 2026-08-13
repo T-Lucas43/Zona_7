@@ -2,7 +2,7 @@ import "server-only";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminConfigured, isSupabaseConfigured } from "@/lib/config";
-import { characters } from "@/lib/demo-data";
+import { characters, liveSession } from "@/lib/demo-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -328,7 +328,25 @@ const campaignOverviewSelect = `
 `;
 
 export async function getCampanhasDoMestre(): Promise<CampanhaResumo[]> {
-  if (!isSupabaseConfigured) return [];
+  if (!isSupabaseConfigured)
+    return [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        nome: "Zona 7: A Convergência",
+        premissa:
+          "Cinco sobreviventes voltam a ser perseguidos por fenômenos que registram sete segundos do futuro.",
+        situacao: "Ativa",
+        personagens: characters.length,
+        conectados: liveSession.connected,
+        pressao: liveSession.pressure,
+        sessao: {
+          id: liveSession.id,
+          titulo: liveSession.title,
+          estado: liveSession.status,
+          cena: liveSession.scene,
+        },
+      },
+    ];
   const user = await getCurrentUser("master");
   if (!user) return [];
   const supabase = await createClient();
@@ -370,7 +388,34 @@ export async function getNomeCampanha(campaignId: string): Promise<string> {
 }
 
 export async function getEncontros(campaignId: string): Promise<EncontroDaCampanha[]> {
-  if (!isSupabaseConfigured) return [];
+  if (!isSupabaseConfigured)
+    return [
+      {
+        id: "demo-encontro",
+        nome: "A transmissão impossível",
+        estado: "active",
+        rodada: 2,
+        participantes: 7,
+        observacoes: "Ordem de demonstração da central da sessão.",
+        turnoAtual: 1,
+        combatentes: [
+          ["Davi Brito", "character", 19],
+          ["Magnus Sigvaldi", "character", 18],
+          ["Arya Black Snape", "character", 17],
+          ["Lize Matsunaga", "character", 15],
+          ["Amber Moss", "character", 14],
+          ["Observador Alfa", "enemy", 13],
+          ["Observador Beta", "enemy", 11],
+        ].map(([nome, tipo, iniciativa], posicao) => ({
+          id: `demo-combatente-${posicao}`,
+          nome: String(nome),
+          tipo: tipo as "character" | "enemy",
+          iniciativa: Number(iniciativa),
+          posicao,
+          atual: posicao === 1,
+        })),
+      },
+    ];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("encounters")

@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Sparkles,
   Swords,
+  WandSparkles,
   UserRound,
   Users,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { SessionControls } from "@/components/master/session-controls";
 import { SessionClock } from "@/components/master/session-clock";
 import { SessionScriptControl } from "@/components/master/session-script-control";
 import { SessionOperations } from "@/components/master/session-operations";
+import { SessionInitiativeStrip } from "@/components/master/session-initiative-strip";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
@@ -48,6 +50,7 @@ import type { SessionPublicState } from "@/server/repositories/session-repositor
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
 import type {
   AbilityUseRequest,
+  CharacterCheckRequest,
   PublicDiceRoll,
   SessionCharacterDetails,
 } from "@/server/repositories/character-repository";
@@ -83,6 +86,7 @@ export function SessionHub({
   items,
   handouts,
   initialAbilityRequests,
+  initialCheckRequests,
   initialRolls,
   initialSceneSyncEnabled,
   visibleCharacterIds,
@@ -102,6 +106,7 @@ export function SessionHub({
   items: ItemDaCampanha[];
   handouts: PistaDaCampanha[];
   initialAbilityRequests: AbilityUseRequest[];
+  initialCheckRequests: CharacterCheckRequest[];
   initialRolls: PublicDiceRoll[];
   initialSceneSyncEnabled: boolean;
   visibleCharacterIds: string[];
@@ -129,6 +134,7 @@ export function SessionHub({
   );
   const [sceneSyncEnabled, setSceneSyncEnabled] = useState(initialSceneSyncEnabled);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [liveEncounters, setLiveEncounters] = useState(encounters);
   const selected = useMemo(
     () => characters.find((item) => item.id === selectedId) ?? characters[0],
     [characters, selectedId],
@@ -137,6 +143,18 @@ export function SessionHub({
   const selectedAccount = accounts.find((account) => account.personagemId === selected?.id);
   const selectedActiveItems =
     selectedDetails?.inventory.filter((item) => isItemInUse(item.state)) ?? [];
+  const activeEncounter =
+    liveEncounters.find((encounter) => encounter.estado === "active") ??
+    liveEncounters.find((encounter) => encounter.estado === "paused") ??
+    null;
+  const preparedCheck =
+    initialCheckRequests.find((request) => request.characterId === selected?.id) ??
+    initialCheckRequests[0];
+  function focusControl(id: string) {
+    window.requestAnimationFrame(() =>
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+  }
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
     const response = await fetch("/api/resources/mutate", {
@@ -452,6 +470,7 @@ export function SessionHub({
             workspace
             sideContent={
               <>
+                <div id="operacoes-sessao">
                 <SessionOperations
                   key={JSON.stringify(
                     encounters.map((encounter) => [
@@ -475,7 +494,9 @@ export function SessionHub({
                   initialActors={actors}
                   initialRequests={initialAbilityRequests}
                   characters={characters}
+                  onEncountersChange={setLiveEncounters}
                 />
+                </div>
                 <LiveRollFeed rolls={initialRolls} />
                 <form
                   className="panel rounded-lg p-4"
@@ -537,6 +558,14 @@ export function SessionHub({
               {sceneSyncEnabled ? "Dessincronizar cena" : "Sincronizar cena para jogadores"}
             </button>
           </div>
+          <SessionInitiativeStrip
+            encounter={activeEncounter}
+            characters={characters}
+            onSelectCharacter={(characterId) => {
+              setSelectedId(characterId);
+              setMessageReview(false);
+            }}
+          />
         </div>
 
         <aside className="session-character-rail" aria-label="Comando dos personagens">
@@ -618,7 +647,52 @@ export function SessionHub({
                       {visible.has(selected.id) ? "Ocultar" : "Mostrar"}
                     </button>
                   </div>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="session-selected-summary">
+                    <CharacterPortrait
+                      name={selected.name}
+                      portraitUrl={selected.portraitUrl}
+                      className="size-12 rounded-full"
+                    />
+                    <span>
+                      <strong>{selected.name}</strong>
+                      <small>{selected.status}</small>
+                    </span>
+                    <div>
+                      {Object.values(selected.resources).map((item) => (
+                        <p key={item.kind}>
+                          <span>{item.kind.toUpperCase()}</span>
+                          <i><b style={{ width: `${item.maximum > 0 ? Math.max(0, Math.min(100, (item.current / item.maximum) * 100)) : 0}%` }} /></i>
+                          <strong>{item.current}/{item.maximum}</strong>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="session-character-actions">
+                    <button type="button" onClick={() => { setResource("pv"); setAmount(5); focusControl("controle-recursos-personagem"); }}>
+                      <Swords size={18} /><span>Aplicar dano</span>
+                    </button>
+                    <button type="button" onClick={() => focusControl("operacoes-sessao")}><BookOpen size={18} /><span>Solicitar teste</span></button>
+                    <button type="button" onClick={() => { setMessageReview(false); focusControl("mensagem-imediata"); }}>
+                      <MessageSquare size={18} /><span>Enviar mensagem</span>
+                    </button>
+                    <button type="button" onClick={() => { setSheetTab("rules"); focusControl("ficha-central-personagem"); }}>
+                      <WandSparkles size={18} /><span>Aplicar efeito</span>
+                    </button>
+                    <button type="button" onClick={() => { setDeliveryKind("handout"); focusControl("entrega-central"); }}>
+                      <Eye size={18} /><span>Revelar pista</span>
+                    </button>
+                    <button type="button" onClick={() => { setSheetTab("abilities"); focusControl("ficha-central-personagem"); }}>
+                      <Sparkles size={18} /><span>Liberar habilidade</span>
+                    </button>
+                  </div>
+                  {preparedCheck && (
+                    <div className="session-prepared-check">
+                      <span><BookOpen size={14} /> Teste preparado</span>
+                      <strong>{preparedCheck.skill ?? preparedCheck.attribute.toUpperCase()} · DT {preparedCheck.difficulty}</strong>
+                      <button type="button" onClick={() => focusControl("operacoes-sessao")}>Abrir</button>
+                    </div>
+                  )}
+                  <div className="mt-3 flex items-center gap-2" id="controle-recursos-personagem">
                     <HeartPulse size={16} className="text-[#df4855]" />
                     <strong className="text-sm">Dano, cura e recursos</strong>
                   </div>
@@ -697,7 +771,7 @@ export function SessionHub({
               )}
 
               {selected && selectedDetails && (
-                <details className="panel session-sheet rounded-lg" open>
+                <details className="panel session-sheet rounded-lg" open id="ficha-central-personagem">
                   <summary className="session-side-summary">
                     Ficha completa de {selected.name}
                   </summary>
@@ -883,7 +957,7 @@ export function SessionHub({
                   </section>
                 </details>
               )}
-              <details className="panel rounded-lg">
+              <details className="panel rounded-lg" id="entrega-central">
                 <summary className="session-side-summary">Entregar item ou pista</summary>
                 <form className="p-4 pt-0" onSubmit={deliver}>
                   <div className="flex items-center gap-2">
@@ -948,7 +1022,7 @@ export function SessionHub({
                   </button>
                 </form>
               </details>
-              <details className="panel rounded-lg">
+              <details className="panel rounded-lg" id="mensagem-imediata">
                 <summary className="session-side-summary">Mensagem imediata</summary>
                 <form className="p-4 pt-0" onSubmit={sendMessage}>
                   <div className="flex items-center gap-2">
@@ -1028,6 +1102,24 @@ export function SessionHub({
                   {notice}
                 </p>
               )}
+              <section className="panel session-recent-events rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <Radio size={15} className="text-[#a978da]" />
+                  <h2 className="text-xs font-extrabold">Últimos eventos</h2>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {initialRolls.slice(0, 3).map((roll) => (
+                    <article key={roll.id}>
+                      <span>{new Date(roll.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <p><strong>{roll.playerName}</strong> rolou {roll.purpose}: <b>{roll.total}</b></p>
+                    </article>
+                  ))}
+                  {initialRolls.length === 0 && !notice && (
+                    <p className="text-xs text-[#747f8c]">Os eventos da sessão aparecerão aqui.</p>
+                  )}
+                  {notice && <article><span>agora</span><p>{notice}</p></article>}
+                </div>
+              </section>
             </div>
           )}
         </aside>

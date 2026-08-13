@@ -37,6 +37,7 @@ import {
   getCharacterWeaknesses,
   getCharacterInventory,
   getSessionAbilityRequests,
+  getSessionCheckRequests,
   getSessionDiceRolls,
 } from "@/server/repositories/character-repository";
 import {
@@ -119,6 +120,7 @@ async function SessionConsole({
     itens,
     pistas,
     solicitacoes,
+    testesSolicitados,
     rolagens,
   ] = await Promise.all([
     getSessionCharacters(campaignId, session.id),
@@ -134,6 +136,7 @@ async function SessionConsole({
     getItensDaCampanha(campaignId),
     getPistas(campaignId),
     getSessionAbilityRequests(session.id),
+    getSessionCheckRequests(session.id),
     getSessionDiceRolls(session.id),
   ]);
   const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
@@ -183,6 +186,7 @@ async function SessionConsole({
       items={itens}
       handouts={pistas}
       initialAbilityRequests={solicitacoes}
+      initialCheckRequests={testesSolicitados}
       initialRolls={rolagens}
       initialSceneSyncEnabled={sceneState.enabled}
       visibleCharacterIds={atoresVisiveis.flatMap((ator) =>

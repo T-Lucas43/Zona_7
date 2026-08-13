@@ -1189,7 +1189,20 @@ export type CharacterCheckRequest = {
 };
 
 export async function getSessionCheckRequests(sessionId: string): Promise<CharacterCheckRequest[]> {
-  if (!isSupabaseConfigured) return [];
+  if (!isSupabaseConfigured)
+    return [
+      {
+        id: "demo-check-request",
+        characterId: "magnus",
+        characterName: "Magnus Sigvaldi",
+        attribute: "pre",
+        skill: "Vontade",
+        difficulty: 15,
+        context: "Resistir à influência da Zona.",
+        method: "roll",
+        createdAt: new Date().toISOString(),
+      },
+    ];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("roll_requests")

@@ -6,6 +6,10 @@ import type { HelpArticle } from "@/server/repositories/rules-repository";
 
 export function HelpCenter({ campaignId, articles, audience, query = "", category = "" }: { campaignId: string; articles: HelpArticle[]; audience: "player" | "master"; query?: string; category?: string }) {
   const categories = [...new Set(articles.map((article) => article.category))];
+  const versionDate = (updatedAt: string) =>
+    new Date(updatedAt).getFullYear() <= 1970
+      ? "manual oficial"
+      : new Date(updatedAt).toLocaleDateString("pt-BR");
   return (
     <div className="help-center">
       <header className="help-hero">
@@ -34,7 +38,7 @@ export function HelpCenter({ campaignId, articles, audience, query = "", categor
           {audience === "player" && (!category || category === "testes") && <CheckSimulator />}
           {articles.map((article) => (
             <article className="help-article panel" id={article.slug} key={article.id}>
-              <div className="help-article-meta"><span>{article.category.replaceAll("_", " ")}</span><span>v{article.version} · {new Date(article.updatedAt).toLocaleDateString("pt-BR")}</span></div>
+              <div className="help-article-meta"><span>{article.category.replaceAll("_", " ")}</span><span>v{article.version} · {versionDate(article.updatedAt)}</span></div>
               <h2>{article.title}</h2>
               <p className="help-summary">{article.summary}</p>
               <p className="help-content">{article.content}</p>
@@ -49,4 +53,3 @@ export function HelpCenter({ campaignId, articles, audience, query = "", categor
     </div>
   );
 }
-

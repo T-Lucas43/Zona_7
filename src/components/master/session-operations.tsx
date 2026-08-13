@@ -32,6 +32,7 @@ export function SessionOperations({
   initialRequests,
   characters,
   compact = false,
+  onEncountersChange,
 }: {
   campaignId: string;
   sessionId: string;
@@ -41,6 +42,7 @@ export function SessionOperations({
   initialRequests: AbilityUseRequest[];
   characters: CharacterSummary[];
   compact?: boolean;
+  onEncountersChange?: (encounters: EncontroDaCampanha[]) => void;
 }) {
   const [encounters, setEncounters] = useState(initialEncounters);
   const [actors, setActors] = useState(initialActors);
@@ -65,6 +67,15 @@ export function SessionOperations({
   const [checkMethod, setCheckMethod] = useState<"roll" | "take_10" | "take_20">("roll");
   const [initiativeDrafts, setInitiativeDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
+  function commitEncounters(
+    update: (current: EncontroDaCampanha[]) => EncontroDaCampanha[],
+  ) {
+    setEncounters((current) => {
+      const next = update(current);
+      onEncountersChange?.(next);
+      return next;
+    });
+  }
   async function createEncounter(event: React.FormEvent) {
     event.preventDefault();
     const response = await fetch("/api/master/encounters", {
@@ -82,7 +93,7 @@ export function SessionOperations({
     });
     const result = (await response.json()) as { item?: EncontroDaCampanha; error?: string };
     if (!response.ok || !result.item) return setNotice(result.error ?? "Falha ao criar encontro.");
-    setEncounters((items) => [
+    commitEncounters((items) => [
       result.item!,
       ...items.map((item) => (item.estado === "active" ? { ...item, estado: "paused" } : item)),
     ]);
@@ -107,7 +118,7 @@ export function SessionOperations({
     const result = (await response.json()) as { item?: EncontroDaCampanha; error?: string };
     if (!response.ok || !result.item)
       return setNotice(result.error ?? "Falha ao atualizar encontro.");
-    setEncounters((items) =>
+    commitEncounters((items) =>
       items.map((current) =>
         current.id === item.id
           ? result.item!
@@ -182,7 +193,7 @@ export function SessionOperations({
     };
     if (!response.ok || !result.combatentes)
       return setNotice(result.error ?? "Falha ao atualizar iniciativa.");
-    setEncounters((items) =>
+    commitEncounters((items) =>
       items.map((item) =>
         item.id === encounter.id
           ? {
