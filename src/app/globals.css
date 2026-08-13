@@ -1679,4 +1679,230 @@ details[open] > .session-side-summary::after {
     width: 4.5rem;
     height: 4.5rem;
   }
+  .notification-panel {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 4.25rem);
+    right: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    max-height: calc(100dvh - 5.25rem);
+    overflow: hidden;
+    border-radius: 0.9rem;
+  }
+  .notification-panel > div:last-child {
+    max-height: calc(100dvh - 9.5rem);
+  }
+  .map-token {
+    transform: translate(-50%, -62%) scale(calc(var(--map-scale, 1) * 0.72));
+  }
+  .map-scene-item {
+    transform: translate(-50%, -50%) scale(calc(var(--map-scale, 1) * 0.7));
+  }
+}
+
+.player-live-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.player-live-resources,
+.player-live-attributes {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.player-live-resources {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.player-live-resources > div,
+.player-live-attributes > div {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.7rem;
+  padding: 0.65rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.player-live-resources span,
+.player-live-attributes span {
+  display: block;
+  color: #858891;
+  font-family: "Courier New", monospace;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.player-live-resources strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1rem;
+}
+
+.player-live-resources i {
+  display: block;
+  height: 0.25rem;
+  margin-top: 0.45rem;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.player-live-resources i b {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #b52532, #ed5361);
+}
+
+.player-live-attributes {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.player-live-attributes > div {
+  text-align: center;
+}
+
+.player-live-attributes strong {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 1.15rem;
+}
+
+.player-live-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.player-live-stats > span {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  padding: 0.35rem 0.65rem;
+  color: #92959c;
+  font-size: 0.7rem;
+}
+
+.player-live-stats strong {
+  color: white;
+}
+
+.dice-stage {
+  display: grid;
+  min-height: 7rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(237, 83, 97, 0.22);
+  border-radius: 0.85rem;
+  background: radial-gradient(circle, rgba(181, 37, 50, 0.15), rgba(0, 0, 0, 0.2) 65%);
+  perspective: 700px;
+}
+
+.rolling-die {
+  display: inline-grid;
+  place-items: center;
+  gap: 0.35rem;
+  color: #fff;
+  text-align: center;
+}
+
+.rolling-die-shape {
+  display: grid;
+  width: 4.5rem;
+  height: 4.5rem;
+  place-items: center;
+  clip-path: polygon(50% 0, 92% 25%, 92% 75%, 50% 100%, 8% 75%, 8% 25%);
+  background: linear-gradient(145deg, #f06774, #9c1d2b 58%, #3d0c12);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.28);
+  filter: drop-shadow(0 0.65rem 0.65rem rgba(0, 0, 0, 0.45));
+  transform-style: preserve-3d;
+}
+
+.rolling-die-shape b {
+  font-size: 1.8rem;
+  font-weight: 950;
+  text-shadow: 0 2px 5px #501018;
+}
+
+.rolling-die small {
+  color: #aeb1b8;
+  font-family: "Courier New", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rolling-die.is-rolling .rolling-die-shape {
+  animation: dice-throw 720ms cubic-bezier(0.2, 0.65, 0.25, 1) infinite;
+}
+
+.rolling-die.has-result .rolling-die-shape {
+  animation: dice-land 460ms cubic-bezier(0.15, 0.8, 0.2, 1) both;
+}
+
+.rolling-die.is-compact .rolling-die-shape {
+  width: 3rem;
+  height: 3rem;
+}
+
+.rolling-die.is-compact .rolling-die-shape b {
+  font-size: 1.2rem;
+}
+
+.dice-feed-entry {
+  animation: dice-feed-enter 420ms ease both;
+}
+
+@keyframes dice-throw {
+  0% {
+    transform: translate3d(-1.2rem, 0.7rem, 0) rotateX(0) rotateY(0) rotateZ(0);
+  }
+  35% {
+    transform: translate3d(0, -1.2rem, 4rem) rotateX(190deg) rotateY(130deg) rotateZ(80deg);
+  }
+  70% {
+    transform: translate3d(1rem, -0.15rem, 1rem) rotateX(330deg) rotateY(290deg) rotateZ(170deg);
+  }
+  100% {
+    transform: translate3d(-1.2rem, 0.7rem, 0) rotateX(540deg) rotateY(420deg) rotateZ(270deg);
+  }
+}
+
+@keyframes dice-land {
+  from {
+    opacity: 0.3;
+    transform: translateY(-1.1rem) rotate(18deg) scale(0.7);
+  }
+  70% {
+    transform: translateY(0.2rem) rotate(-3deg) scale(1.1);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0) scale(1);
+  }
+}
+
+@keyframes dice-feed-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem) scale(0.98);
+  }
+}
+
+@media (max-width: 520px) {
+  .player-live-sheet-header {
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .player-live-resources {
+    gap: 0.35rem;
+  }
+  .player-live-resources > div,
+  .player-live-attributes > div {
+    padding: 0.5rem 0.35rem;
+  }
+  .player-live-attributes {
+    gap: 0.35rem;
+  }
 }

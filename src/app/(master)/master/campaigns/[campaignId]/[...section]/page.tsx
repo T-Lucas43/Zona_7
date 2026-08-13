@@ -36,6 +36,7 @@ import {
   getCharacterWeaknesses,
   getCharacterInventory,
   getSessionAbilityRequests,
+  getSessionDiceRolls,
 } from "@/server/repositories/character-repository";
 import {
   getAtores,
@@ -116,6 +117,7 @@ async function SessionConsole({
     itens,
     pistas,
     solicitacoes,
+    rolagens,
   ] = await Promise.all([
     getSessionCharacters(campaignId, session.id),
     getCenaPrincipal(campaignId, sceneState.sceneId),
@@ -130,6 +132,7 @@ async function SessionConsole({
     getItensDaCampanha(campaignId),
     getPistas(campaignId),
     getSessionAbilityRequests(session.id),
+    getSessionDiceRolls(session.id),
   ]);
   const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
   return (
@@ -144,6 +147,8 @@ async function SessionConsole({
           token.y,
           token.visivel,
           token.characterState,
+          token.portraitKey,
+          token.itemImageKey,
         ]),
         cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
         execucaoRoteiro?.runId,
@@ -156,6 +161,7 @@ async function SessionConsole({
           character.resources,
         ]),
         solicitacoes.map((request) => [request.id, request.decision, request.rolled]),
+        rolagens.map((roll) => [roll.id, roll.total]),
         sceneState.enabled,
       ])}
       campaignId={campaignId}
@@ -175,6 +181,7 @@ async function SessionConsole({
       items={itens}
       handouts={pistas}
       initialAbilityRequests={solicitacoes}
+      initialRolls={rolagens}
       initialSceneSyncEnabled={sceneState.enabled}
       visibleCharacterIds={atoresVisiveis.flatMap((ator) =>
         ator.characterId && elenco.some((character) => character.id === ator.characterId)
@@ -471,7 +478,14 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
             key={JSON.stringify([
               cena.id,
               cena.backgroundKey,
-              cena.tokens.map((token) => [token.id, token.x, token.y, token.visivel]),
+              cena.tokens.map((token) => [
+                token.id,
+                token.x,
+                token.y,
+                token.visivel,
+                token.portraitKey,
+                token.itemImageKey,
+              ]),
               cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
               mapCharacters.map((character) => character.id),
             ])}

@@ -31,6 +31,7 @@ import { SessionControls } from "@/components/master/session-controls";
 import { SessionClock } from "@/components/master/session-clock";
 import { SessionScriptControl } from "@/components/master/session-script-control";
 import { SessionOperations } from "@/components/master/session-operations";
+import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
 import type {
@@ -47,6 +48,7 @@ import type { SessionPublicState } from "@/server/repositories/session-repositor
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
 import type {
   AbilityUseRequest,
+  PublicDiceRoll,
   SessionCharacterDetails,
 } from "@/server/repositories/character-repository";
 
@@ -81,6 +83,7 @@ export function SessionHub({
   items,
   handouts,
   initialAbilityRequests,
+  initialRolls,
   initialSceneSyncEnabled,
   visibleCharacterIds,
 }: {
@@ -99,6 +102,7 @@ export function SessionHub({
   items: ItemDaCampanha[];
   handouts: PistaDaCampanha[];
   initialAbilityRequests: AbilityUseRequest[];
+  initialRolls: PublicDiceRoll[];
   initialSceneSyncEnabled: boolean;
   visibleCharacterIds: string[];
 }) {
@@ -449,6 +453,20 @@ export function SessionHub({
             sideContent={
               <>
                 <SessionOperations
+                  key={JSON.stringify(
+                    encounters.map((encounter) => [
+                      encounter.id,
+                      encounter.estado,
+                      encounter.rodada,
+                      encounter.turnoAtual,
+                      encounter.combatentes.map((combatente) => [
+                        combatente.id,
+                        combatente.iniciativa,
+                        combatente.posicao,
+                        combatente.atual,
+                      ]),
+                    ]),
+                  )}
                   compact
                   campaignId={campaignId}
                   sessionId={session.id}
@@ -457,6 +475,7 @@ export function SessionHub({
                   initialActors={actors}
                   initialRequests={initialAbilityRequests}
                 />
+                <LiveRollFeed rolls={initialRolls} />
                 <form
                   className="panel rounded-lg p-4"
                   id="transmissao-sessao"

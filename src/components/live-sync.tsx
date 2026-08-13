@@ -34,6 +34,7 @@ const liveTables = [
   "roll_requests",
   "dice_rolls",
   "encounters",
+  "encounter_combatants",
 ] as const;
 
 export function LiveSync({

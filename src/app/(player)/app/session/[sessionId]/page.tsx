@@ -10,7 +10,7 @@ import { RealtimeIndicator } from "@/components/realtime-indicator";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
-import { isCharacterSectionVisible } from "@/lib/character-visibility";
+import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
 import {
   getAuthorizedCharacters,
   getAuthorizedMessages,
@@ -117,6 +117,8 @@ export default async function PlayerSessionPage({
                 token.y,
                 token.visivel,
                 token.characterState,
+                token.portraitKey,
+                token.itemImageKey,
               ]),
               scene.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
               cast.map((member) => member.characterId),
@@ -140,6 +142,96 @@ export default async function PlayerSessionPage({
           </section>
         )}
       </div>
+      <section className="panel player-live-sheet mt-4 rounded-lg p-4 sm:p-5">
+        <div className="player-live-sheet-header">
+          {isCharacterFieldVisible(character, "portrait") && (
+            <CharacterPortrait
+              name={character.name}
+              portraitUrl={character.portraitUrl}
+              className="size-16 rounded-xl sm:size-20"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow">minha ficha // atualização ao vivo</p>
+            <h2 className="mt-1 truncate text-xl font-black sm:text-2xl">{character.name}</h2>
+            <p className="mt-1 text-xs text-[#92959c]">
+              {isCharacterFieldVisible(character, "codename") && character.codename
+                ? `${character.codename} · `
+                : ""}
+              {isCharacterFieldVisible(character, "class") ? character.className : "Sobrevivente"}
+              {isCharacterFieldVisible(character, "path") ? ` · ${character.path}` : ""}
+            </p>
+          </div>
+          {isCharacterFieldVisible(character, "nex") && (
+            <span className="tag shrink-0">NEX {character.nex}%</span>
+          )}
+        </div>
+        {isCharacterSectionVisible(character, "resources") && (
+          <div className="player-live-resources mt-4">
+            {Object.values(character.resources).map((resource) => (
+              <div key={resource.kind}>
+                <span>{resource.kind}</span>
+                <strong>
+                  {resource.current}/{resource.maximum}
+                </strong>
+                <i>
+                  <b
+                    style={{
+                      width: `${Math.max(0, Math.min(100, resource.maximum > 0 ? (resource.current / resource.maximum) * 100 : 0))}%`,
+                    }}
+                  />
+                </i>
+              </div>
+            ))}
+          </div>
+        )}
+        {isCharacterFieldVisible(character, "attributes") && (
+          <div className="player-live-attributes mt-4">
+            {Object.entries(character.attributes).map(([label, value]) => (
+              <div key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="player-live-stats mt-4">
+          {isCharacterFieldVisible(character, "defense") && (
+            <span>
+              DEF <strong>{character.defense}</strong>
+            </span>
+          )}
+          {isCharacterFieldVisible(character, "block") && (
+            <span>
+              Bloqueio <strong>{character.blockValue ?? 0}</strong>
+            </span>
+          )}
+          {isCharacterFieldVisible(character, "dodge") && (
+            <span>
+              Esquiva <strong>{character.dodgeValue ?? 0}</strong>
+            </span>
+          )}
+          {isCharacterFieldVisible(character, "movement") && (
+            <span>
+              Deslocamento <strong>{character.movement ?? 0}m</strong>
+            </span>
+          )}
+          {isCharacterFieldVisible(character, "main_dc") && (
+            <span>
+              DT <strong>{character.mainDc ?? "—"}</strong>
+            </span>
+          )}
+        </div>
+        {isCharacterFieldVisible(character, "conditions") && character.conditions.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {character.conditions.map((condition) => (
+              <span className="tag" key={condition}>
+                {condition}
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
       {visibleEntities.length > 0 && (
         <section className="panel mt-4 rounded-lg p-4">
           <p className="eyebrow">presenças na cena</p>
@@ -296,32 +388,6 @@ export default async function PlayerSessionPage({
           )}
         </div>
         <div className="space-y-4">
-          <section className="panel rounded-lg p-5">
-            <p className="eyebrow">estado atual</p>
-            <div className="mt-2 flex items-center gap-3">
-              <CharacterPortrait
-                name={character.name}
-                portraitUrl={character.portraitUrl}
-                className="size-12 rounded-full"
-              />
-              <h2 className="text-xl font-extrabold">{character.name}</h2>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {Object.values(character.resources).map((resource) => (
-                <div
-                  key={resource.kind}
-                  className="rounded border border-[#30333a] p-3 text-center"
-                >
-                  <span className="font-mono text-[0.65rem] uppercase text-[#767980]">
-                    {resource.kind}
-                  </span>
-                  <strong className="mt-1 block text-xl">
-                    {resource.current}/{resource.maximum}
-                  </strong>
-                </div>
-              ))}
-            </div>
-          </section>
           <section className="panel rounded-lg p-5">
             <div className="flex items-center gap-2">
               <Swords size={17} className="text-[#d94a57]" />

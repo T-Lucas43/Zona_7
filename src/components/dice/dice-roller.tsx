@@ -2,10 +2,21 @@
 
 import { useState } from "react";
 import { Dices, LoaderCircle } from "lucide-react";
+import { RollingDie } from "@/components/dice/rolling-die";
 
 type Result = { total: number; rolls: number[]; normalized: string; keptIndexes: number[] };
 
-export function DiceRoller({ compact = false, characterId, sessionId, disabledReason }: { compact?: boolean; characterId?: string; sessionId?: string; disabledReason?: string }) {
+export function DiceRoller({
+  compact = false,
+  characterId,
+  sessionId,
+  disabledReason,
+}: {
+  compact?: boolean;
+  characterId?: string;
+  sessionId?: string;
+  disabledReason?: string;
+}) {
   const [formula, setFormula] = useState("1d20+5");
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
@@ -13,15 +24,26 @@ export function DiceRoller({ compact = false, characterId, sessionId, disabledRe
 
   async function roll() {
     setPending(true);
+    setResult(null);
     setError("");
+    const startedAt = Date.now();
     try {
       const response = await fetch("/api/dice/roll", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ formula, purpose: "Rolagem livre", visibility: "session", characterId, sessionId }),
+        body: JSON.stringify({
+          formula,
+          purpose: "Rolagem livre",
+          visibility: "session",
+          characterId,
+          sessionId,
+        }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Falha na rolagem.");
+      const remainingAnimation = Math.max(0, 900 - (Date.now() - startedAt));
+      if (remainingAnimation > 0)
+        await new Promise((resolve) => window.setTimeout(resolve, remainingAnimation));
       setResult(payload);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Falha na rolagem.");
@@ -59,13 +81,22 @@ export function DiceRoller({ compact = false, characterId, sessionId, disabledRe
           {pending ? <LoaderCircle className="animate-spin" size={17} /> : "Rolar"}
         </button>
       </div>
-      {disabledReason && <p className="mt-3 rounded border border-[#6b3038] bg-[#711924]/15 p-3 text-xs text-[#f0a5ad]">{disabledReason}</p>}
+      {(pending || result) && (
+        <div className="dice-stage mt-4" aria-live="polite">
+          <RollingDie rolling={pending} value={result?.total} />
+        </div>
+      )}
+      {disabledReason && (
+        <p className="mt-3 rounded border border-[#6b3038] bg-[#711924]/15 p-3 text-xs text-[#f0a5ad]">
+          {disabledReason}
+        </p>
+      )}
       {error && (
         <p role="alert" className="mt-3 text-xs text-[#f07580]">
           {error}
         </p>
       )}
-      {result && (
+      {result && !pending && (
         <div
           className="mt-4 flex items-end justify-between rounded-md border border-[#33363d] bg-black/25 p-4"
           aria-live="polite"

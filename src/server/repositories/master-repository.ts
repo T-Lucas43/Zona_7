@@ -123,7 +123,9 @@ export type CenaDaCampanha = {
     actorType?: string;
     characterState?: string;
     portraitUrl?: string;
+    portraitKey?: string;
     itemImageUrl?: string;
+    itemImageKey?: string;
     nome: string;
     cor: string;
     x: number;
@@ -199,6 +201,15 @@ export type EncontroDaCampanha = {
   rodada: number;
   participantes: number;
   observacoes: string;
+  turnoAtual: number | null;
+  combatentes: Array<{
+    id: string;
+    nome: string;
+    tipo: "character" | "ally" | "npc" | "enemy";
+    iniciativa: number | null;
+    posicao: number;
+    atual: boolean;
+  }>;
 };
 
 export type MensagemDaCampanha = {
@@ -363,18 +374,34 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("encounters")
-    .select("id,name,status,round,gm_notes,encounter_combatants(id)")
+    .select(
+      "id,name,status,round,current_turn_position,gm_notes,encounter_combatants(id,display_name,kind,initiative,position)",
+    )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
   if (error) throw new Error(`Falha ao carregar encontros: ${error.message}`);
-  return data.map((encounter) => ({
-    id: encounter.id,
-    nome: encounter.name,
-    estado: encounter.status,
-    rodada: encounter.round,
-    participantes: encounter.encounter_combatants.length,
-    observacoes: encounter.gm_notes ?? "",
-  }));
+  return data.map((encounter) => {
+    const combatentes = [...encounter.encounter_combatants].sort(
+      (left, right) => left.position - right.position,
+    );
+    return {
+      id: encounter.id,
+      nome: encounter.name,
+      estado: encounter.status,
+      rodada: encounter.round,
+      participantes: combatentes.length,
+      observacoes: encounter.gm_notes ?? "",
+      turnoAtual: encounter.current_turn_position,
+      combatentes: combatentes.map((combatente) => ({
+        id: combatente.id,
+        nome: combatente.display_name,
+        tipo: combatente.kind,
+        iniciativa: combatente.initiative,
+        posicao: combatente.position,
+        atual: combatente.position === encounter.current_turn_position,
+      })),
+    };
+  });
 }
 
 export async function getMensagensDaCampanha(campaignId: string): Promise<MensagemDaCampanha[]> {
@@ -935,48 +962,82 @@ export async function getCenaPrincipal(
   const signed = media
     ? await supabase.storage.from(media.storage_bucket).createSignedUrl(media.storage_path, 3600)
     : null;
+  const rawTokens = data.scene_tokens as unknown as Array<{
+    id: string;
+    actor_id: string | null;
+    item_id: string | null;
+    label: string;
+    x: number;
+    y: number;
+    z_index: number;
+    visible: boolean;
+    actors: {
+      color: string;
+      character_id: string | null;
+      actor_type: string;
+      public_portrait_path: string | null;
+      characters: { character_state: string | null } | null;
+    } | null;
+    items: { name: string; image_path: string | null } | null;
+  }>;
+  const visibleActorIds = rawTokens.flatMap((token) => (token.actor_id ? [token.actor_id] : []));
+  const visibleItemIds = rawTokens.flatMap((token) => (token.item_id ? [token.item_id] : []));
+  const privilegedReader = isAdminConfigured ? createAdminClient() : null;
+  const [actorDetails, itemDetails] = await Promise.all([
+    privilegedReader && visibleActorIds.length > 0
+      ? privilegedReader
+          .from("actors")
+          .select(
+            "id,color,character_id,actor_type,public_portrait_path,characters(character_state)",
+          )
+          .eq("campaign_id", campaignId)
+          .in("id", visibleActorIds)
+          .is("deleted_at", null)
+      : Promise.resolve({ data: [], error: null }),
+    privilegedReader && visibleItemIds.length > 0
+      ? privilegedReader
+          .from("items")
+          .select("id,name,image_path")
+          .eq("campaign_id", campaignId)
+          .in("id", visibleItemIds)
+          .is("deleted_at", null)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (actorDetails.error)
+    throw new Error(`Falha ao carregar imagens dos atores visíveis: ${actorDetails.error.message}`);
+  if (itemDetails.error)
+    throw new Error(`Falha ao carregar imagens dos itens visíveis: ${itemDetails.error.message}`);
+  const actorsById = new Map((actorDetails.data ?? []).map((actor) => [actor.id, actor]));
+  const itemsById = new Map((itemDetails.data ?? []).map((item) => [item.id, item]));
+  const storageReader = privilegedReader ?? supabase;
   const tokens = await Promise.all(
-    (
-      data.scene_tokens as unknown as Array<{
-        id: string;
-        actor_id: string | null;
-        item_id: string | null;
-        label: string;
-        x: number;
-        y: number;
-        z_index: number;
-        visible: boolean;
-        actors: {
-          color: string;
-          character_id: string | null;
-          actor_type: string;
-          public_portrait_path: string | null;
-          characters: { character_state: string | null } | null;
-        } | null;
-        items: { name: string; image_path: string | null } | null;
-      }>
-    ).map(async (token) => {
-      const portrait = token.actors?.public_portrait_path
-        ? await supabase.storage
-            .from(token.actors.character_id ? "portraits" : "actor-portraits")
-            .createSignedUrl(token.actors.public_portrait_path, 3600)
+    rawTokens.map(async (token) => {
+      const actor = (token.actor_id ? actorsById.get(token.actor_id) : undefined) ?? token.actors;
+      const item = (token.item_id ? itemsById.get(token.item_id) : undefined) ?? token.items;
+      const actorCharacter = Array.isArray(actor?.characters)
+        ? actor.characters[0]
+        : actor?.characters;
+      const portrait = actor?.public_portrait_path
+        ? await storageReader.storage
+            .from(actor.character_id ? "portraits" : "actor-portraits")
+            .createSignedUrl(actor.public_portrait_path, 3600)
         : null;
-      const itemImage = token.items?.image_path
-        ? await supabase.storage
-            .from("handouts-public")
-            .createSignedUrl(token.items.image_path, 3600)
+      const itemImage = item?.image_path
+        ? await storageReader.storage.from("handouts-public").createSignedUrl(item.image_path, 3600)
         : null;
       return {
         id: token.id,
         atorId: token.actor_id ?? undefined,
         itemId: token.item_id ?? undefined,
-        characterId: token.actors?.character_id ?? undefined,
-        actorType: token.actors?.actor_type,
-        characterState: token.actors?.characters?.character_state ?? undefined,
+        characterId: actor?.character_id ?? undefined,
+        actorType: actor?.actor_type,
+        characterState: actorCharacter?.character_state ?? undefined,
         portraitUrl: portrait?.data?.signedUrl,
+        portraitKey: actor?.public_portrait_path ?? undefined,
         itemImageUrl: itemImage?.data?.signedUrl,
-        nome: token.items?.name ?? token.label,
-        cor: token.items ? "#d9b76f" : (token.actors?.color ?? "#ffffff"),
+        itemImageKey: item?.image_path ?? undefined,
+        nome: item?.name ?? token.label,
+        cor: item ? "#d9b76f" : (actor?.color ?? "#ffffff"),
         x: Number(token.x),
         y: Number(token.y),
         zIndex: token.z_index,

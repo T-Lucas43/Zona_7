@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, Plus, Sparkles, Swords, Trash2, UserPlus, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Plus,
+  Save,
+  Sparkles,
+  Swords,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { AbilityUseRequest } from "@/server/repositories/character-repository";
 import type {
@@ -33,6 +44,12 @@ export function SessionOperations({
   const [encounterName, setEncounterName] = useState("");
   const [actorName, setActorName] = useState("");
   const [actorType, setActorType] = useState("npc");
+  const [combatantName, setCombatantName] = useState("");
+  const [combatantKind, setCombatantKind] = useState<"character" | "ally" | "npc" | "enemy">(
+    "character",
+  );
+  const [combatantInitiative, setCombatantInitiative] = useState(0);
+  const [initiativeDrafts, setInitiativeDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   async function createEncounter(event: React.FormEvent) {
     event.preventDefault();
@@ -79,7 +96,7 @@ export function SessionOperations({
     setEncounters((items) =>
       items.map((current) =>
         current.id === item.id
-          ? { ...result.item!, participantes: current.participantes }
+          ? result.item!
           : status === "active" && current.estado === "active"
             ? { ...current, estado: "paused" }
             : current,
@@ -119,6 +136,63 @@ export function SessionOperations({
     setActors((items) => [item, ...items]);
     setActorName("");
     setNotice("Entidade criada. Escolha como inseri-la na cena.");
+  }
+  async function initiativeAction(
+    encounter: EncontroDaCampanha,
+    action: "add" | "update" | "remove" | "current",
+    combatantId?: string,
+  ) {
+    const draft = combatantId ? initiativeDrafts[combatantId] : undefined;
+    const response = await fetch("/api/master/initiative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        campaignId,
+        encounterId: encounter.id,
+        ...(action === "add"
+          ? {
+              name: combatantName,
+              kind: combatantKind,
+              initiative: combatantInitiative,
+            }
+          : { combatantId }),
+        ...(action === "update"
+          ? { initiative: draft === "" || draft === undefined ? null : Number(draft) }
+          : {}),
+      }),
+    });
+    const result = (await response.json()) as {
+      combatentes?: EncontroDaCampanha["combatentes"];
+      error?: string;
+    };
+    if (!response.ok || !result.combatentes)
+      return setNotice(result.error ?? "Falha ao atualizar iniciativa.");
+    setEncounters((items) =>
+      items.map((item) =>
+        item.id === encounter.id
+          ? {
+              ...item,
+              combatentes: result.combatentes!,
+              participantes: result.combatentes!.length,
+              turnoAtual: result.combatentes!.find((value) => value.atual)?.posicao ?? null,
+            }
+          : item,
+      ),
+    );
+    if (action === "add") {
+      setCombatantName("");
+      setCombatantInitiative(0);
+    }
+    setNotice(
+      action === "add"
+        ? "Combatente incluído e ordem recalculada."
+        : action === "remove"
+          ? "Combatente retirado da iniciativa."
+          : action === "current"
+            ? "Turno atual sincronizado com todos."
+            : "Iniciativa salva e ordem recalculada.",
+    );
   }
   async function addActor(actor: AtorDaCampanha, visibleToPlayers: boolean) {
     const response = await fetch("/api/master/map/tokens", {
@@ -248,6 +322,117 @@ export function SessionOperations({
                   <X size={12} /> Encerrar
                 </button>
               </div>
+              {item.estado !== "ended" && (
+                <div className="mt-3 border-t border-[#30333a] pt-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-xs uppercase tracking-wide text-[#d8a1a7]">
+                      Ordem de iniciativa
+                    </strong>
+                    <span className="tag">rodada {item.rodada}</span>
+                  </div>
+                  <form
+                    className="mt-2 grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-1.5"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void initiativeAction(item, "add");
+                    }}
+                  >
+                    <input
+                      className="field"
+                      required
+                      aria-label={`Novo combatente de ${item.nome}`}
+                      placeholder="Nome"
+                      value={combatantName}
+                      onChange={(event) => setCombatantName(event.target.value)}
+                    />
+                    <input
+                      className="field text-center"
+                      type="number"
+                      min={-100}
+                      max={999}
+                      aria-label="Iniciativa inicial"
+                      value={combatantInitiative}
+                      onChange={(event) => setCombatantInitiative(Number(event.target.value))}
+                    />
+                    <button className="btn px-2" aria-label="Adicionar à iniciativa">
+                      <Plus size={13} />
+                    </button>
+                    <select
+                      className="field col-span-3"
+                      aria-label="Tipo do combatente"
+                      value={combatantKind}
+                      onChange={(event) =>
+                        setCombatantKind(
+                          event.target.value as "character" | "ally" | "npc" | "enemy",
+                        )
+                      }
+                    >
+                      <option value="character">Personagem</option>
+                      <option value="ally">Aliado</option>
+                      <option value="npc">NPC</option>
+                      <option value="enemy">Inimigo</option>
+                    </select>
+                  </form>
+                  <ol className="mt-2 space-y-1.5">
+                    {item.combatentes.map((combatente) => (
+                      <li
+                        className={`grid grid-cols-[1.5rem_minmax(0,1fr)_3.6rem_auto] items-center gap-1.5 rounded border p-1.5 ${combatente.atual ? "border-[#8a3943] bg-[#8a1b27]/20" : "border-[#30333a]"}`}
+                        key={combatente.id}
+                      >
+                        <span className="grid size-6 place-items-center rounded-full bg-black/25 font-mono text-[0.65rem]">
+                          {combatente.posicao + 1}
+                        </span>
+                        <button
+                          className="min-w-0 truncate text-left text-xs font-bold"
+                          type="button"
+                          title="Definir como turno atual"
+                          onClick={() => void initiativeAction(item, "current", combatente.id)}
+                        >
+                          {combatente.atual && <CheckCircle2 className="mr-1 inline" size={12} />}
+                          {combatente.nome}
+                        </button>
+                        <input
+                          className="field px-1 text-center font-mono text-xs"
+                          type="number"
+                          min={-100}
+                          max={999}
+                          aria-label={`Iniciativa de ${combatente.nome}`}
+                          value={initiativeDrafts[combatente.id] ?? combatente.iniciativa ?? ""}
+                          onChange={(event) =>
+                            setInitiativeDrafts((current) => ({
+                              ...current,
+                              [combatente.id]: event.target.value,
+                            }))
+                          }
+                        />
+                        <span className="flex gap-1">
+                          <button
+                            className="btn px-1.5"
+                            type="button"
+                            aria-label={`Salvar iniciativa de ${combatente.nome}`}
+                            onClick={() => void initiativeAction(item, "update", combatente.id)}
+                          >
+                            <Save size={11} />
+                          </button>
+                          <button
+                            className="btn px-1.5 text-[#f0949d]"
+                            type="button"
+                            aria-label={`Remover ${combatente.nome} da iniciativa`}
+                            onClick={() => void initiativeAction(item, "remove", combatente.id)}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                    {item.combatentes.length === 0 && (
+                      <li className="text-xs text-[#777a82]">
+                        Inclua os participantes para habilitar o avanço de turnos.
+                      </li>
+                    )}
+                  </ol>
+                </div>
+              )}
             </div>
           ))}
         </div>

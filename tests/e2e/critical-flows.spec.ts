@@ -6,12 +6,12 @@ test("mestre acessa o painel e controla uma sessão", async ({ page }) => {
   await page.waitForURL("**/master");
   await expect(page.getByRole("heading", { name: "Painel do mestre" })).toBeVisible();
   await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/sessions");
-  await expect(page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" }),
+  ).toBeVisible();
 });
 
-test("novo layout recolhe a navegação e o mapa não oferece conexão de tokens", async ({
-  page,
-}) => {
+test("novo layout recolhe a navegação e o mapa não oferece conexão de tokens", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/login");
   await page.getByRole("button", { name: "Mestre" }).click();
@@ -43,6 +43,16 @@ test("jogador acessa somente a própria experiência mobile", async ({ page }) =
   await playerMenu.getByRole("button", { name: "Fechar menu de navegação" }).click();
   await page.getByRole("link", { name: /Entrar na sala/ }).click();
   await expect(page.getByRole("heading", { name: "A transmissão impossível" })).toBeVisible();
+  await expect(page.locator(".player-live-sheet").getByText("Davi Brito")).toBeVisible();
+  const firstToken = page.locator(".map-token").first();
+  const tokenBox = await firstToken.boundingBox();
+  expect(tokenBox?.width ?? 999).toBeLessThan(60);
+  await page.getByRole("button", { name: /notificações/ }).click();
+  const notificationPanel = page.locator(".notification-panel");
+  await expect(notificationPanel).toBeVisible();
+  const notificationBox = await notificationPanel.boundingBox();
+  expect(notificationBox?.x ?? -1).toBeGreaterThanOrEqual(0);
+  expect((notificationBox?.x ?? 0) + (notificationBox?.width ?? 999)).toBeLessThanOrEqual(375);
 });
 
 test("rolagem é produzida pelo servidor e auditável", async ({ page }) => {
@@ -51,6 +61,8 @@ test("rolagem é produzida pelo servidor e auditável", async ({ page }) => {
   await page.goto("/app/session/session-01");
   await page.getByLabel("Fórmula de dados").fill("4d20kh1+10");
   await page.getByRole("button", { name: "Rolar" }).click();
+  await expect(page.getByRole("img", { name: "Dado rolando" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Resultado do dado:/ })).toBeVisible();
   await expect(page.getByText("4d20kh1+10")).toBeVisible();
 });
 
@@ -90,7 +102,9 @@ test("central da sessão reúne controle, entregas e Gragas jogável", async ({ 
   await page.goto("/login");
   await page.getByRole("button", { name: "Mestre" }).click();
   await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/sessions");
-  await expect(page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" }),
+  ).toBeVisible();
   await expect(page.locator(".session-map-viewport")).toBeVisible();
   await page.getByRole("button", { name: "Recolher ferramentas do mapa" }).click();
   await expect(page.getByRole("button", { name: "Abrir ferramentas do mapa" })).toBeVisible();
@@ -99,15 +113,24 @@ test("central da sessão reúne controle, entregas e Gragas jogável", async ({ 
   await expect(page.getByRole("button", { name: "Abrir painel dos personagens" })).toBeVisible();
   await page.getByRole("button", { name: "Abrir painel dos personagens" }).click();
   const gragasToken = page.getByRole("button", { name: "Token de Gragas" });
-  await expect(gragasToken.locator(".map-token-head")).toHaveCSS("background-image", /personagens-zona7/);
+  await expect(gragasToken.locator(".map-token-head")).toHaveCSS(
+    "background-image",
+    /personagens-zona7/,
+  );
   await page.getByRole("button", { name: "Aumentar zoom" }).click();
   await expect(page.getByText("125%", { exact: true })).toBeVisible();
   await gragasToken.click();
-  await expect(page.locator("#acoes-rapidas").getByRole("heading", { name: "Gragas" })).toBeVisible();
+  await expect(
+    page.locator("#acoes-rapidas").getByRole("heading", { name: "Gragas" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Ocultar" }).click();
   await expect(page.getByText("Gragas foi ocultado da tela dos jogadores.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Token de Gragas" })).toHaveCount(0);
-  await page.locator("details").filter({ hasText: "Entregar item ou pista" }).locator("summary").click();
+  await page
+    .locator("details")
+    .filter({ hasText: "Entregar item ou pista" })
+    .locator("summary")
+    .click();
   await page.getByPlaceholder("Nome do item").fill("Cartão vermelho");
   await page.getByPlaceholder("Descrição ou conteúdo").fill("Abre a porta do estúdio.");
   await page.getByRole("button", { name: "Entregar e notificar" }).click();
@@ -130,11 +153,16 @@ test("mestre cria conta e atribui um personagem", async ({ page }) => {
   await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/members");
   await page.getByLabel("Nome", { exact: true }).fill("Jogador Novo");
   await page.getByLabel("E-mail").fill("jogador.novo@zona7.local");
-  await page.getByLabel("Personagem atribuído").selectOption({ label: "Gragas — Hospedeiro do Revide" });
+  await page
+    .getByLabel("Personagem atribuído")
+    .selectOption({ label: "Gragas — Hospedeiro do Revide" });
   await page.getByRole("button", { name: "Gerar" }).click();
   await page.getByRole("button", { name: "Criar conta e atribuir" }).click();
   await expect(page.getByText(/Conta de Jogador Novo criada/)).toBeVisible();
-  const assignedCharacter = page.getByRole("combobox", { name: "Personagem de Jogador Novo", exact: true });
+  const assignedCharacter = page.getByRole("combobox", {
+    name: "Personagem de Jogador Novo",
+    exact: true,
+  });
   await expect(assignedCharacter).toHaveValue("gragas");
   await assignedCharacter.selectOption("");
   await page.getByRole("button", { name: "Salvar personagem de Jogador Novo" }).click();
