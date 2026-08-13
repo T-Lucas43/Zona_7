@@ -440,6 +440,11 @@ export function SessionHub({
               setSelectedId(characterId);
               setMessageReview(false);
             }}
+            items={items}
+            recipientCharacters={characters.map((character) => ({
+              id: character.id,
+              name: character.name,
+            }))}
             workspace
             sideContent={
               <>

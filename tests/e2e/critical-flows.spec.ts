@@ -9,6 +9,20 @@ test("mestre acessa o painel e controla uma sessão", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sessão 01 — Sete Segundos Antes" })).toBeVisible();
 });
 
+test("novo layout recolhe a navegação e o mapa não oferece conexão de tokens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Mestre" }).click();
+  await page.waitForURL("**/master");
+  await page.getByRole("button", { name: "Recolher barra lateral" }).click();
+  await expect(page.getByRole("button", { name: "Expandir barra lateral" })).toBeVisible();
+  await page.goto("/master/campaigns/11111111-1111-4111-8111-111111111111/maps");
+  await expect(page.getByRole("heading", { name: "Mapas e tokens" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Conectar tokens" })).toHaveCount(0);
+});
+
 test("jogador acessa somente a própria experiência mobile", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/login");

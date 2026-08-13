@@ -1,4 +1,13 @@
-import { Archive, CheckCircle2, EyeOff, LockKeyhole, MessageSquare, Package, Sparkles } from "lucide-react";
+import Image from "next/image";
+import {
+  Archive,
+  CheckCircle2,
+  EyeOff,
+  LockKeyhole,
+  MessageSquare,
+  Package,
+  Sparkles,
+} from "lucide-react";
 import { AbilityDetails } from "@/components/character/ability-details";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
@@ -19,7 +28,11 @@ import {
   getAuthorizedInvestigationBoard,
   getSessionAbilityRequests,
 } from "@/server/repositories/character-repository";
-import { demoCampaignId, getCurrentSession, getSessionCast } from "@/server/repositories/session-repository";
+import {
+  demoCampaignId,
+  getCurrentSession,
+  getSessionCast,
+} from "@/server/repositories/session-repository";
 
 export default async function CharacterSectionPage({
   params,
@@ -50,11 +63,19 @@ export default async function CharacterSectionPage({
   const campaignId = character.campaignId ?? demoCampaignId;
   const session = await getCurrentSession(campaignId);
   const [cast, notifications, abilityRequests] = await Promise.all([
-    section === "inventory" && session ? getSessionCast(character.campaignId, session.id) : Promise.resolve([]),
+    section === "inventory" && session
+      ? getSessionCast(character.campaignId, session.id)
+      : Promise.resolve([]),
     section === "messages" ? getAuthorizedNotifications() : Promise.resolve([]),
-    section === "abilities" && session ? getSessionAbilityRequests(session.id) : Promise.resolve([]),
+    section === "abilities" && session
+      ? getSessionAbilityRequests(session.id)
+      : Promise.resolve([]),
   ]);
-  const donationTargets = cast.flatMap((member) => member.characterId && member.characterId !== character.id ? [{ id: member.characterId, name: member.name }] : []);
+  const donationTargets = cast.flatMap((member) =>
+    member.characterId && member.characterId !== character.id
+      ? [{ id: member.characterId, name: member.name }]
+      : [],
+  );
   const [abilities, inventory, messages, handouts, skills, actions, weaknesses] = await Promise.all(
     [
       section === "abilities" ? getCharacterAbilities(character.id) : Promise.resolve([]),
@@ -122,7 +143,24 @@ export default async function CharacterSectionPage({
                   ))}
                   {ability.limit && <span className="tag">{ability.limit}</span>}
                 </div>
-                {ability.state === "unlocked" && session && !["dying", "dead"].includes(character.characterState ?? "") && <AbilityRequestButton campaignId={campaignId} sessionId={session.id} characterId={character.id} abilityId={ability.id} pendingRequest={(() => { const request = abilityRequests.find((item) => item.characterAbilityId === ability.id); return request ? { id: request.id, decision: request.decision, rolled: request.rolled } : undefined; })()} />}
+                {ability.state === "unlocked" &&
+                  session &&
+                  !["dying", "dead"].includes(character.characterState ?? "") && (
+                    <AbilityRequestButton
+                      campaignId={campaignId}
+                      sessionId={session.id}
+                      characterId={character.id}
+                      abilityId={ability.id}
+                      pendingRequest={(() => {
+                        const request = abilityRequests.find(
+                          (item) => item.characterAbilityId === ability.id,
+                        );
+                        return request
+                          ? { id: request.id, decision: request.decision, rolled: request.rolled }
+                          : undefined;
+                      })()}
+                    />
+                  )}
               </article>
             ))}
           </div>
@@ -131,10 +169,18 @@ export default async function CharacterSectionPage({
       {section === "weaknesses" && (
         <div className="mt-6 grid gap-3 md:grid-cols-2">
           {weaknesses.map((weakness) => (
-            <article className="rounded-lg border border-[#663039] bg-[#6f1722]/10 p-4" key={weakness.id}>
-              <div className="flex justify-between gap-2"><strong>{weakness.name}</strong>{weakness.active && <span className="tag">Ativa</span>}</div>
+            <article
+              className="rounded-lg border border-[#663039] bg-[#6f1722]/10 p-4"
+              key={weakness.id}
+            >
+              <div className="flex justify-between gap-2">
+                <strong>{weakness.name}</strong>
+                {weakness.active && <span className="tag">Ativa</span>}
+              </div>
               <div className="mt-3 rounded border border-[#663039] bg-black/20 p-3">
-                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
+                  Informações
+                </span>
                 <p className="mt-2 text-sm text-[#a4a6ac]">{weakness.effect}</p>
               </div>
             </article>
@@ -153,7 +199,9 @@ export default async function CharacterSectionPage({
                 {skill.attribute} · {skill.training}
               </p>
               <div className="mt-3 rounded border border-[#30333a] bg-black/20 p-3">
-                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
+                  Informações
+                </span>
                 <p className="mt-2 text-xs leading-5 text-[#92959c]">
                   {skill.notes?.trim() || "Nenhuma informação adicional disponibilizada."}
                 </p>
@@ -182,7 +230,9 @@ export default async function CharacterSectionPage({
               </div>
               <p className="mt-3 text-xs text-[#8f9299]">Alcance: {action.range}</p>
               <div className="mt-3 rounded border border-[#30333a] bg-black/20 p-3">
-                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">Informações</span>
+                <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#d27882]">
+                  Informações
+                </span>
                 <p className="mt-2 text-xs leading-5 text-[#92959c]">
                   {action.description?.trim() || "Nenhuma informação adicional disponibilizada."}
                 </p>
@@ -193,14 +243,26 @@ export default async function CharacterSectionPage({
       )}
       {section === "inventory" && (
         <div className="mt-6 space-y-3">
-          {inventory.map(({ id, name, detail, description, state }) => (
+          {inventory.map(({ id, name, detail, description, state, imageUrl }) => (
             <article className="panel flex items-center gap-4 rounded-lg p-4" key={id}>
-              <Package className="text-[#c84854]" />
+              {imageUrl ? (
+                <Image
+                  className="size-16 rounded-xl object-cover"
+                  src={imageUrl}
+                  alt={`Imagem de ${name}`}
+                  width={64}
+                  height={64}
+                />
+              ) : (
+                <Package className="text-[#c84854]" />
+              )}
               <div className="flex-1">
                 <h2 className="font-extrabold">{name}</h2>
                 <p className="mt-1 text-xs text-[#83868e]">{detail}</p>
                 {description && <p className="mt-2 text-xs text-[#a5a7ad]">{description}</p>}
-                {!["dying", "dead"].includes(character.characterState ?? "") && <InventoryActions characterItemId={id} targets={donationTargets} />}
+                {!["dying", "dead"].includes(character.characterState ?? "") && (
+                  <InventoryActions characterItemId={id} targets={donationTargets} />
+                )}
               </div>
               <span className="tag">{state}</span>
             </article>
@@ -229,30 +291,35 @@ export default async function CharacterSectionPage({
           <LiveSync campaignId={character.campaignId ?? "11111111-1111-4111-8111-111111111111"} />
           <PlayerInvestigationBoard />
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {handouts.map((item) => (
-            <article className="panel rounded-lg p-5" key={item.id}>
-              {item.locked ? (
-                <LockKeyhole className="text-[#777a81]" />
-              ) : (
-                <Archive className="text-[#cf4551]" />
-              )}
-              <h2 className="mt-5 font-extrabold">
-                {item.locked ? "ARQUIVO BLOQUEADO" : item.title}
-              </h2>
-              <p className="mt-2 text-xs text-[#858891]">
-                {item.locked
-                  ? "Acesso exclusivo do mestre."
-                  : item.excerpt}
-              </p>
-              {!item.locked && item.content && <p className="mt-3 rounded border border-[#30333a] bg-black/20 p-3 text-sm leading-6">{item.content}</p>}
-            </article>
-          ))}
+            {handouts.map((item) => (
+              <article className="panel rounded-lg p-5" key={item.id}>
+                {item.locked ? (
+                  <LockKeyhole className="text-[#777a81]" />
+                ) : (
+                  <Archive className="text-[#cf4551]" />
+                )}
+                <h2 className="mt-5 font-extrabold">
+                  {item.locked ? "ARQUIVO BLOQUEADO" : item.title}
+                </h2>
+                <p className="mt-2 text-xs text-[#858891]">
+                  {item.locked ? "Acesso exclusivo do mestre." : item.excerpt}
+                </p>
+                {!item.locked && item.content && (
+                  <p className="mt-3 rounded border border-[#30333a] bg-black/20 p-3 text-sm leading-6">
+                    {item.content}
+                  </p>
+                )}
+              </article>
+            ))}
           </div>
         </div>
       )}
       {section === "history" && (
         <div className="panel mt-6 rounded-lg p-5">
-          <div className="flex items-center gap-3 text-sm"><CheckCircle2 size={17} className="text-[#5ebf89]" /><p>Nenhum evento público foi disponibilizado pelo mestre.</p></div>
+          <div className="flex items-center gap-3 text-sm">
+            <CheckCircle2 size={17} className="text-[#5ebf89]" />
+            <p>Nenhum evento público foi disponibilizado pelo mestre.</p>
+          </div>
         </div>
       )}
     </div>
@@ -261,9 +328,11 @@ export default async function CharacterSectionPage({
 
 async function PlayerInvestigationBoard() {
   const board = await getAuthorizedInvestigationBoard();
-  return <InvestigationBoard
-    readOnly
-    initialItems={board.items}
-    initialConnections={board.connections}
-  />;
+  return (
+    <InvestigationBoard
+      readOnly
+      initialItems={board.items}
+      initialConnections={board.connections}
+    />
+  );
 }

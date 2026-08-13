@@ -22,6 +22,7 @@ export async function POST(request: Request) {
     const title = String(form.get("title") ?? "Arquivo").trim();
     const characterId = String(form.get("characterId") ?? "");
     const actorId = String(form.get("actorId") ?? "");
+    const itemId = String(form.get("itemId") ?? "");
     const sceneId = String(form.get("sceneId") ?? "");
     const file = form.get("file");
     if (!(file instanceof File)) throw new Error("Selecione um arquivo.");
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     const user = await requireCampaignMaster(campaignId);
     if (!allowed.has(file.type)) throw new Error("Formato de arquivo não permitido.");
     if (file.size > 26_214_400) throw new Error("O arquivo ultrapassa 25 MB.");
-    if (["portrait", "actor_portrait"].includes(assetType) && file.size > 5_242_880)
+    if (["portrait", "actor_portrait", "item"].includes(assetType) && file.size > 5_242_880)
       throw new Error("O retrato ultrapassa 5 MB.");
     if (!isSupabaseConfigured)
       return NextResponse.json(
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const portrait = assetType === "portrait" || assetType === "token";
     const actorPortrait = assetType === "actor_portrait";
+    const itemImage = assetType === "item";
     if (actorPortrait) {
       if (!/^[0-9a-f-]{36}$/i.test(actorId)) throw new Error("Ator inválido.");
       const { data: actor, error: actorLookupError } = await supabase
@@ -57,11 +59,22 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (actorLookupError || !actor) throw new Error("Ator não encontrado.");
     }
+    if (itemImage) {
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) throw new Error("Item inválido.");
+      const { data: item, error: itemLookupError } = await supabase
+        .from("items")
+        .select("id")
+        .eq("id", itemId)
+        .eq("campaign_id", campaignId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (itemLookupError || !item) throw new Error("Item não encontrado.");
+    }
     const bucket = actorPortrait
       ? "actor-portraits"
       : portrait
         ? "portraits"
-        : assetType === "map"
+        : assetType === "map" || itemImage
           ? "handouts-public"
           : "handouts-private";
     const suffix = extname(file.name)
@@ -69,7 +82,9 @@ export async function POST(request: Request) {
       .replace(/[^.a-z0-9]/g, "");
     const path = actorPortrait
       ? `${campaignId}/${actorId}/${crypto.randomUUID()}${suffix}`
-      : `${campaignId}/${assetType}/${crypto.randomUUID()}${suffix}`;
+      : itemImage
+        ? `${campaignId}/items/${itemId}/${crypto.randomUUID()}${suffix}`
+        : `${campaignId}/${assetType}/${crypto.randomUUID()}${suffix}`;
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(path, file, { contentType: file.type, upsert: false });
@@ -79,13 +94,13 @@ export async function POST(request: Request) {
       .insert({
         campaign_id: campaignId,
         owner_user_id: user.id,
-        asset_type: actorPortrait ? "portrait" : assetType,
+        asset_type: actorPortrait ? "portrait" : itemImage ? "image" : assetType,
         title,
         storage_bucket: bucket,
         storage_path: path,
         mime_type: file.type,
         byte_size: file.size,
-        visibility: assetType === "map" ? "campaign" : "gm_only",
+        visibility: assetType === "map" || itemImage ? "campaign" : "gm_only",
       })
       .select("id")
       .single();
@@ -112,7 +127,11 @@ export async function POST(request: Request) {
         .eq("id", actorId)
         .eq("campaign_id", campaignId);
       if (actorError) throw new Error(actorError.message);
-      await supabase.from("actor_media").update({ is_primary: false }).eq("actor_id", actorId).eq("purpose", "portrait");
+      await supabase
+        .from("actor_media")
+        .update({ is_primary: false })
+        .eq("actor_id", actorId)
+        .eq("purpose", "portrait");
       const { error: mediaLinkError } = await supabase.from("actor_media").insert({
         campaign_id: campaignId,
         actor_id: actorId,
@@ -135,19 +154,49 @@ export async function POST(request: Request) {
         .eq("campaign_id", campaignId);
       if (sceneError) throw new Error(sceneError.message);
     }
+    if (itemImage) {
+      const { error: itemError } = await supabase
+        .from("items")
+        .update({ image_path: path, updated_at: new Date().toISOString() })
+        .eq("id", itemId)
+        .eq("campaign_id", campaignId);
+      if (itemError) throw new Error(itemError.message);
+    }
     await supabase.from("audit_events").insert({
       campaign_id: campaignId,
       actor_user_id: user.id,
-      entity_type: assetType === "map" ? "game_scene" : actorPortrait ? "actor" : "character",
-      entity_id: assetType === "map" ? sceneId : actorPortrait ? actorId : characterId || data.id,
-      event_type: assetType === "map" ? "scene_map_updated" : "portrait_updated",
+      entity_type:
+        assetType === "map"
+          ? "game_scene"
+          : actorPortrait
+            ? "actor"
+            : itemImage
+              ? "item"
+              : "character",
+      entity_id:
+        assetType === "map"
+          ? sceneId
+          : actorPortrait
+            ? actorId
+            : itemImage
+              ? itemId
+              : characterId || data.id,
+      event_type:
+        assetType === "map"
+          ? "scene_map_updated"
+          : itemImage
+            ? "item_image_updated"
+            : "portrait_updated",
       visibility: "gm_only",
       after_data: { mediaAssetId: data.id, assetType, title },
       metadata: { storageBucket: bucket },
       idempotency_key: crypto.randomUUID(),
     });
     const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-    return NextResponse.json({ ...data, signedUrl: signed?.signedUrl ?? null }, { status: 201 });
+    return NextResponse.json(
+      { ...data, signedUrl: signed?.signedUrl ?? null, imagePath: itemImage ? path : undefined },
+      { status: 201 },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Falha no envio." },

@@ -21,8 +21,11 @@ export async function POST(request: Request) {
     await requireCampaignMaster(input.campaignId);
     const supabase = await createClient();
     if (input.action === "delete") {
-      const { error } = await supabase.from("items").update({ deleted_at: new Date().toISOString() })
-        .eq("id", input.itemId).eq("campaign_id", input.campaignId);
+      const { error } = await supabase
+        .from("items")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", input.itemId)
+        .eq("campaign_id", input.campaignId);
       if (error) throw new Error(error.message);
       return NextResponse.json({ deleted: true });
     }
@@ -33,16 +36,35 @@ export async function POST(request: Request) {
       visibility: "owner_only",
       updated_at: new Date().toISOString(),
     };
-    const query = input.action === "create"
-      ? supabase.from("items").insert({ campaign_id: input.campaignId, ...values })
-      : supabase.from("items").update(values).eq("id", input.itemId).eq("campaign_id", input.campaignId);
-    const { data, error } = await query.select("id,name,description,category,visibility").single();
+    const query =
+      input.action === "create"
+        ? supabase.from("items").insert({ campaign_id: input.campaignId, ...values })
+        : supabase
+            .from("items")
+            .update(values)
+            .eq("id", input.itemId)
+            .eq("campaign_id", input.campaignId);
+    const { data, error } = await query
+      .select("id,name,description,category,visibility,image_path")
+      .single();
     if (error) throw new Error(error.message);
-    return NextResponse.json({ item: {
-      id: data.id, nome: data.name, descricao: data.description ?? "",
-      categoria: data.category ?? "Item de sessão", visibilidade: "Dono da ficha e mestres",
-    } }, { status: input.action === "create" ? 201 : 200 });
+    return NextResponse.json(
+      {
+        item: {
+          id: data.id,
+          nome: data.name,
+          descricao: data.description ?? "",
+          categoria: data.category ?? "Item de sessão",
+          visibilidade: "Dono da ficha e mestres",
+          imagePath: data.image_path ?? undefined,
+        },
+      },
+      { status: input.action === "create" ? 201 : 200 },
+    );
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Item inválido." }, { status: 400 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Item inválido." },
+      { status: 400 },
+    );
   }
 }

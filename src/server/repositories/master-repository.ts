@@ -103,6 +103,8 @@ export type ItemDaCampanha = {
   descricao: string;
   categoria: string;
   visibilidade: string;
+  imagePath?: string;
+  imageUrl?: string;
 };
 
 export type CenaDaCampanha = {
@@ -115,11 +117,13 @@ export type CenaDaCampanha = {
   backgroundKey?: string;
   tokens: Array<{
     id: string;
-    atorId: string;
+    atorId?: string;
+    itemId?: string;
     characterId?: string;
     actorType?: string;
     characterState?: string;
     portraitUrl?: string;
+    itemImageUrl?: string;
     nome: string;
     cor: string;
     x: number;
@@ -149,7 +153,9 @@ export type PaginaCadernoDaCampanha = {
   updatedAt: string;
 };
 
-export async function getCadernosDaCampanha(campaignId: string): Promise<PaginaCadernoDaCampanha[]> {
+export async function getCadernosDaCampanha(
+  campaignId: string,
+): Promise<PaginaCadernoDaCampanha[]> {
   if (!isSupabaseConfigured) return [];
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -218,6 +224,7 @@ export type PistaDaCampanha = {
     rotation: number;
     zIndex: number;
     style: "polaroid" | "postit" | "paper";
+    visibleToPlayers: boolean;
   };
 };
 
@@ -279,7 +286,8 @@ function mapCampaignOverview(row: CampaignOverviewRow): CampanhaResumo {
   const sessions = [...(row.sessions ?? [])].sort((a, b) =>
     b.updated_at.localeCompare(a.updated_at),
   );
-  const current = sessions.find((session) => !["ended", "archived"].includes(session.status)) ?? sessions[0];
+  const current =
+    sessions.find((session) => !["ended", "archived"].includes(session.status)) ?? sessions[0];
   return {
     id: row.id,
     nome: row.name,
@@ -287,7 +295,8 @@ function mapCampaignOverview(row: CampaignOverviewRow): CampanhaResumo {
     situacao: campaignStatusLabels[row.status] ?? row.status,
     personagens: row.characters?.length ?? 0,
     conectados:
-      current?.session_participants?.filter((participant) => participant.status === "online").length ?? 0,
+      current?.session_participants?.filter((participant) => participant.status === "online")
+        .length ?? 0,
     pressao: row.campaign_rule_settings?.pressure ?? 0,
     sessao: current
       ? {
@@ -373,7 +382,9 @@ export async function getMensagensDaCampanha(campaignId: string): Promise<Mensag
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("messages")
-    .select("id,apparent_sender_name,status,created_at,message_contents(body),message_recipients(id)")
+    .select(
+      "id,apparent_sender_name,status,created_at,message_contents(body),message_recipients(id)",
+    )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -402,21 +413,42 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("handouts")
-    .select("id,title,type,state,visibility,public_excerpt,handout_contents(protected_text),investigation_board_items(x,y,rotation,z_index,display_style)")
+    .select(
+      "id,title,type,state,visibility,public_excerpt,handout_contents(protected_text),investigation_board_items(x,y,rotation,z_index,display_style,visible_to_players)",
+    )
     .eq("campaign_id", campaignId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   if (error) throw new Error(`Falha ao carregar pistas: ${error.message}`);
-  return (data as unknown as Array<{
-    id: string;
-    title: string;
-    type: string;
-    state: string;
-    visibility: string;
-    public_excerpt: string | null;
-    handout_contents: { protected_text: string | null } | null;
-    investigation_board_items: Array<{ x: number; y: number; rotation: number; z_index: number; display_style: "polaroid" | "postit" | "paper" }> | { x: number; y: number; rotation: number; z_index: number; display_style: "polaroid" | "postit" | "paper" } | null;
-  }>).map((handout) => ({
+  return (
+    data as unknown as Array<{
+      id: string;
+      title: string;
+      type: string;
+      state: string;
+      visibility: string;
+      public_excerpt: string | null;
+      handout_contents: { protected_text: string | null } | null;
+      investigation_board_items:
+        | Array<{
+            x: number;
+            y: number;
+            rotation: number;
+            z_index: number;
+            display_style: "polaroid" | "postit" | "paper";
+            visible_to_players: boolean;
+          }>
+        | {
+            x: number;
+            y: number;
+            rotation: number;
+            z_index: number;
+            display_style: "polaroid" | "postit" | "paper";
+            visible_to_players: boolean;
+          }
+        | null;
+    }>
+  ).map((handout) => ({
     id: handout.id,
     titulo: handout.title,
     tipo: handout.type,
@@ -425,8 +457,19 @@ export async function getPistas(campaignId: string): Promise<PistaDaCampanha[]> 
     resumo: handout.public_excerpt ?? "",
     conteudo: handout.handout_contents?.protected_text ?? "",
     board: (() => {
-      const value = Array.isArray(handout.investigation_board_items) ? handout.investigation_board_items[0] : handout.investigation_board_items;
-      return value ? { x: Number(value.x), y: Number(value.y), rotation: Number(value.rotation), zIndex: value.z_index, style: value.display_style } : undefined;
+      const value = Array.isArray(handout.investigation_board_items)
+        ? handout.investigation_board_items[0]
+        : handout.investigation_board_items;
+      return value
+        ? {
+            x: Number(value.x),
+            y: Number(value.y),
+            rotation: Number(value.rotation),
+            zIndex: value.z_index,
+            style: value.display_style,
+            visibleToPlayers: value.visible_to_players,
+          }
+        : undefined;
     })(),
   }));
 }
@@ -440,7 +483,11 @@ export async function getConexoesDoMural(campaignId: string): Promise<ConexaoDoM
     .eq("campaign_id", campaignId)
     .order("created_at");
   if (error) throw new Error(`Falha ao carregar conexões do mural: ${error.message}`);
-  return data.map((item) => ({ id: item.id, fromHandoutId: item.from_handout_id, toHandoutId: item.to_handout_id }));
+  return data.map((item) => ({
+    id: item.id,
+    fromHandoutId: item.from_handout_id,
+    toHandoutId: item.to_handout_id,
+  }));
 }
 
 export async function getItensDaCampanha(campaignId: string): Promise<ItemDaCampanha[]> {
@@ -448,18 +495,27 @@ export async function getItensDaCampanha(campaignId: string): Promise<ItemDaCamp
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("items")
-    .select("id,name,description,category,visibility")
+    .select("id,name,description,category,visibility,image_path")
     .eq("campaign_id", campaignId)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
   if (error) throw new Error(`Falha ao carregar itens: ${error.message}`);
-  return data.map((item) => ({
-    id: item.id,
-    nome: item.name,
-    descricao: item.description ?? "",
-    categoria: item.category ?? "Item de sessão",
-    visibilidade: visibilityLabels[item.visibility] ?? item.visibility,
-  }));
+  return Promise.all(
+    data.map(async (item) => {
+      const signed = item.image_path
+        ? await supabase.storage.from("handouts-public").createSignedUrl(item.image_path, 3600)
+        : null;
+      return {
+        id: item.id,
+        nome: item.name,
+        descricao: item.description ?? "",
+        categoria: item.category ?? "Item de sessão",
+        visibilidade: visibilityLabels[item.visibility] ?? item.visibility,
+        imagePath: item.image_path ?? undefined,
+        imageUrl: signed?.data?.signedUrl,
+      };
+    }),
+  );
 }
 
 export async function getSessionSceneState(sessionId: string): Promise<SessionSceneState> {
@@ -498,11 +554,16 @@ export async function getRegras(campaignId: string): Promise<RegrasDaCampanha | 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("campaigns")
-    .select("system_code,rule_profiles(name,description),campaign_rule_settings(zero_hp_mode,zero_sanity_mode,pressure)")
+    .select(
+      "system_code,rule_profiles(name,description),campaign_rule_settings(zero_hp_mode,zero_sanity_mode,pressure)",
+    )
     .eq("id", campaignId)
     .single();
   if (error) throw new Error(`Falha ao carregar regras: ${error.message}`);
-  const profile = data.rule_profiles as unknown as { name: string; description: string | null } | null;
+  const profile = data.rule_profiles as unknown as {
+    name: string;
+    description: string | null;
+  } | null;
   const settings = data.campaign_rule_settings as unknown as {
     zero_hp_mode: string;
     zero_sanity_mode: string;
@@ -637,7 +698,10 @@ export async function getContasDaCampanha(
   const authById = new Map<string, { email?: string; last_sign_in_at?: string }>();
   if (includeAccessDetails) {
     const admin = createAdminClient();
-    const { data: authData, error: authError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1_000 });
+    const { data: authData, error: authError } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1_000,
+    });
     if (authError) throw new Error(`Falha ao carregar acessos: ${authError.message}`);
     authData.users.forEach((user) => authById.set(user.id, user));
   }
@@ -796,33 +860,42 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("actors")
-    .select("id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id)")
+    .select(
+      "id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id)",
+    )
     .eq("campaign_id", campaignId)
     .neq("actor_type", "player_character")
     .is("deleted_at", null)
     .order("name");
   if (error) throw new Error(`Falha ao carregar atores: ${error.message}`);
-  return Promise.all(data.map(async (ator) => {
-    const portrait = ator.public_portrait_path
-      ? await supabase.storage.from("actor-portraits").createSignedUrl(ator.public_portrait_path, 3600)
-      : null;
-    return {
-      id: ator.id,
-      nome: ator.name,
-      tipo: actorTypeLabels[ator.actor_type] ?? ator.actor_type,
-      descricao: ator.public_description ?? "",
-      cor: ator.color,
-      estado: statusLabels[ator.state] ?? ator.state,
-      visibilidade: visibilityLabels[ator.visibility] ?? ator.visibility,
-      portraitUrl: portrait?.data?.signedUrl,
-      naCena: ator.scene_tokens.length > 0,
-      tokenId: ator.scene_tokens[0]?.id,
-      tokenVisivel: ator.scene_tokens[0]?.visible,
-    };
-  }));
+  return Promise.all(
+    data.map(async (ator) => {
+      const portrait = ator.public_portrait_path
+        ? await supabase.storage
+            .from("actor-portraits")
+            .createSignedUrl(ator.public_portrait_path, 3600)
+        : null;
+      return {
+        id: ator.id,
+        nome: ator.name,
+        tipo: actorTypeLabels[ator.actor_type] ?? ator.actor_type,
+        descricao: ator.public_description ?? "",
+        cor: ator.color,
+        estado: statusLabels[ator.state] ?? ator.state,
+        visibilidade: visibilityLabels[ator.visibility] ?? ator.visibility,
+        portraitUrl: portrait?.data?.signedUrl,
+        naCena: ator.scene_tokens.length > 0,
+        tokenId: ator.scene_tokens[0]?.id,
+        tokenVisivel: ator.scene_tokens[0]?.visible,
+      };
+    }),
+  );
 }
 
-export async function getCenaPrincipal(campaignId: string, sceneId?: string | null): Promise<CenaDaCampanha> {
+export async function getCenaPrincipal(
+  campaignId: string,
+  sceneId?: string | null,
+): Promise<CenaDaCampanha> {
   const demonstracao: CenaDaCampanha = {
     id: "73000000-0000-4000-8000-000000000001",
     nome: "Estúdio dos Sete Segundos",
@@ -848,7 +921,7 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
   let query = supabase
     .from("game_scenes")
     .select(
-      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,label,x,y,z_index,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)))",
+      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,item_id,label,x,y,z_index,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)),items(name,image_path))",
     )
     .eq("campaign_id", campaignId)
     .is("deleted_at", null);
@@ -862,17 +935,12 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
   const signed = media
     ? await supabase.storage.from(media.storage_bucket).createSignedUrl(media.storage_path, 3600)
     : null;
-  const { data: connectionRows, error: connectionError } = await supabase
-    .from("scene_token_connections")
-    .select("id,from_token_id,to_token_id")
-    .eq("scene_id", data.id)
-    .order("created_at");
-  if (connectionError) throw new Error(`Falha ao carregar conexões do mapa: ${connectionError.message}`);
   const tokens = await Promise.all(
     (
       data.scene_tokens as unknown as Array<{
         id: string;
-        actor_id: string;
+        actor_id: string | null;
+        item_id: string | null;
         label: string;
         x: number;
         y: number;
@@ -885,20 +953,30 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
           public_portrait_path: string | null;
           characters: { character_state: string | null } | null;
         } | null;
+        items: { name: string; image_path: string | null } | null;
       }>
     ).map(async (token) => {
       const portrait = token.actors?.public_portrait_path
-        ? await supabase.storage.from(token.actors.character_id ? "portraits" : "actor-portraits").createSignedUrl(token.actors.public_portrait_path, 3600)
+        ? await supabase.storage
+            .from(token.actors.character_id ? "portraits" : "actor-portraits")
+            .createSignedUrl(token.actors.public_portrait_path, 3600)
+        : null;
+      const itemImage = token.items?.image_path
+        ? await supabase.storage
+            .from("handouts-public")
+            .createSignedUrl(token.items.image_path, 3600)
         : null;
       return {
         id: token.id,
-        atorId: token.actor_id,
+        atorId: token.actor_id ?? undefined,
+        itemId: token.item_id ?? undefined,
         characterId: token.actors?.character_id ?? undefined,
         actorType: token.actors?.actor_type,
         characterState: token.actors?.characters?.character_state ?? undefined,
         portraitUrl: portrait?.data?.signedUrl,
-        nome: token.label,
-        cor: token.actors?.color ?? "#ffffff",
+        itemImageUrl: itemImage?.data?.signedUrl,
+        nome: token.items?.name ?? token.label,
+        cor: token.items ? "#d9b76f" : (token.actors?.color ?? "#ffffff"),
         x: Number(token.x),
         y: Number(token.y),
         zIndex: token.z_index,
@@ -915,7 +993,7 @@ export async function getCenaPrincipal(campaignId: string, sceneId?: string | nu
     backgroundUrl: signed?.data?.signedUrl,
     backgroundKey: media ? `${media.storage_bucket}/${media.storage_path}` : undefined,
     tokens,
-    connections: connectionRows.map((item) => ({ id: item.id, fromTokenId: item.from_token_id, toTokenId: item.to_token_id })),
+    connections: [],
   };
 }
 

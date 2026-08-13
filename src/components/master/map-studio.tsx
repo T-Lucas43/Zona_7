@@ -1,25 +1,27 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
+  Gift,
   ImageUp,
-  Link2,
-  Link2Off,
   Map,
   Move,
+  Package,
   PanelLeftClose,
   PanelLeftOpen,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { getCharacterPortraitStyle } from "@/components/character/character-portrait";
-import type { CenaDaCampanha } from "@/server/repositories/master-repository";
+import type { CenaDaCampanha, ItemDaCampanha } from "@/server/repositories/master-repository";
 
 function tokenPortraitStyle(token: CenaDaCampanha["tokens"][number]): React.CSSProperties | null {
   return getCharacterPortraitStyle(token.nome, token.portraitUrl);
 }
 
 function tokenBodyProfile(token: CenaDaCampanha["tokens"][number]) {
+  if (token.itemId) return "item";
   const key = token.nome
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -43,6 +45,8 @@ export function MapStudio({
   stackControls = false,
   workspace = false,
   sideContent,
+  items = [],
+  recipientCharacters = [],
 }: {
   campaignId: string;
   initialScene: CenaDaCampanha;
@@ -54,6 +58,8 @@ export function MapStudio({
   stackControls?: boolean;
   workspace?: boolean;
   sideContent?: React.ReactNode;
+  items?: ItemDaCampanha[];
+  recipientCharacters?: Array<{ id: string; name: string }>;
 }) {
   const [cena, setCena] = useState(initialScene);
   const [selecionado, setSelecionado] = useState(initialScene.tokens[0]?.id ?? "");
@@ -61,11 +67,11 @@ export function MapStudio({
   const [aviso, setAviso] = useState("");
   const [fundo, setFundo] = useState<string | null>(initialScene.backgroundUrl ?? null);
   const [zoom, setZoom] = useState(100);
-  const [connections, setConnections] = useState(initialScene.connections);
-  const [connectionMode, setConnectionMode] = useState(false);
-  const [connectionSource, setConnectionSource] = useState<string | null>(null);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
   const [dragging, setDragging] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  const [placingItemId, setPlacingItemId] = useState("");
+  const [selectedItemTokenId, setSelectedItemTokenId] = useState("");
+  const [recipientId, setRecipientId] = useState(recipientCharacters[0]?.id ?? "");
   const mapa = useRef<HTMLDivElement>(null);
   const availableTokens = useMemo(
     () =>
@@ -84,6 +90,8 @@ export function MapStudio({
     (token) =>
       token.visivel && (!token.characterId || !hiddenCharacterIds.includes(token.characterId)),
   );
+  const selectedItemToken = cena.tokens.find((token) => token.id === selectedItemTokenId);
+  const selectedMapItem = items.find((item) => item.id === selectedItemToken?.itemId);
   const nextZIndex = () => Math.max(0, ...cena.tokens.map((token) => token.zIndex)) + 1;
 
   async function persistToken(tokenId: string, x: number, y: number, zIndex: number) {
@@ -102,10 +110,53 @@ export function MapStudio({
   }
 
   async function mover(event: React.MouseEvent<HTMLDivElement>) {
-    if (collective || connectionMode || !effectiveSelectedTokenId || !mapa.current) return;
+    if (collective || !mapa.current) return;
     const rect = mapa.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
+    if (placingItemId) {
+      const item = items.find((value) => value.id === placingItemId);
+      if (!item) return;
+      const zIndex = nextZIndex();
+      const response = await fetch("/api/master/map/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "item",
+          campaignId,
+          sceneId: cena.id,
+          itemId: item.id,
+          x,
+          y,
+          visibleToPlayers: true,
+        }),
+      });
+      const result = (await response.json()) as { id?: string; error?: string };
+      if (!response.ok || !result.id) return setAviso(result.error ?? "Falha ao posicionar item.");
+      const token: CenaDaCampanha["tokens"][number] = {
+        id: result.id,
+        itemId: item.id,
+        itemImageUrl: item.imageUrl,
+        nome: item.nome,
+        cor: "#d9b76f",
+        x,
+        y,
+        zIndex,
+        visivel: true,
+      };
+      setCena((current) => ({
+        ...current,
+        tokens: current.tokens.some((value) => value.itemId === item.id)
+          ? current.tokens.map((value) => (value.itemId === item.id ? token : value))
+          : [...current.tokens, token],
+      }));
+      setSelecionado(result.id);
+      setSelectedItemTokenId(result.id);
+      setPlacingItemId("");
+      setAviso(`“${item.nome}” foi colocado no mapa e sincronizado com os jogadores.`);
+      return;
+    }
+    if (!effectiveSelectedTokenId) return;
     const zIndex = nextZIndex();
     if (!(await persistToken(effectiveSelectedTokenId, x, y, zIndex))) return;
     setCena((atual) => ({
@@ -121,7 +172,7 @@ export function MapStudio({
     token: CenaDaCampanha["tokens"][number],
   ) {
     event.stopPropagation();
-    if (collective || connectionMode || !mapa.current) return;
+    if (collective || !mapa.current) return;
     const rect = mapa.current.getBoundingClientRect();
     const pointerX = (event.clientX - rect.left) / rect.width;
     const pointerY = (event.clientY - rect.top) / rect.height;
@@ -156,48 +207,39 @@ export function MapStudio({
     if (token) await persistToken(token.id, token.x, token.y, token.zIndex);
   }
 
-  async function chooseConnection(tokenId: string) {
-    if (!connectionMode || collective) return;
-    if (!connectionSource) {
-      setConnectionSource(tokenId);
-      setAviso("Escolha o segundo token para criar ou remover o fio.");
-      return;
-    }
-    if (connectionSource === tokenId) return setConnectionSource(null);
-    const response = await fetch("/api/master/map/connections", {
+  async function deliverMapItem() {
+    const token = cena.tokens.find((value) => value.id === selectedItemTokenId);
+    const item = items.find((value) => value.id === token?.itemId);
+    const recipient = recipientCharacters.find((value) => value.id === recipientId);
+    if (!token || !item || !recipient) return setAviso("Selecione o item e o destinatário.");
+    const response = await fetch("/api/master/deliveries", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        kind: "item",
         campaignId,
-        sceneId: cena.id,
-        fromTokenId: connectionSource,
-        toTokenId: tokenId,
+        targetCharacterIds: [recipient.id],
+        name: item.nome,
+        description: item.descricao,
+        quantity: 1,
       }),
     });
-    const result = (await response.json()) as {
-      connected?: boolean;
-      id?: string;
-      fromTokenId?: string;
-      toTokenId?: string;
-      error?: string;
-    };
-    if (response.ok) {
-      if (result.connected && result.id && result.fromTokenId && result.toTokenId) {
-        setConnections((current) => [
-          ...current,
-          { id: result.id!, fromTokenId: result.fromTokenId!, toTokenId: result.toTokenId! },
-        ]);
-      } else {
-        const pair = [connectionSource, tokenId].sort().join(":");
-        setConnections((current) =>
-          current.filter((item) => [item.fromTokenId, item.toTokenId].sort().join(":") !== pair),
-        );
-      }
-      setAviso(
-        result.connected ? "Tokens conectados com fio vermelho." : "Conexão entre tokens removida.",
-      );
-    } else setAviso(result.error ?? "Falha ao conectar tokens.");
-    setConnectionSource(null);
+    const result = (await response.json()) as { error?: string };
+    if (!response.ok) return setAviso(result.error ?? "Falha ao entregar item.");
+    const removeResponse = await fetch("/api/master/map/tokens", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "remove_item", campaignId, tokenId: token.id }),
+    });
+    const removeResult = (await removeResponse.json()) as { error?: string };
+    if (!removeResponse.ok)
+      return setAviso(removeResult.error ?? "Item entregue, mas não foi removido do mapa.");
+    setCena((current) => ({
+      ...current,
+      tokens: current.tokens.filter((value) => value.id !== token.id),
+    }));
+    setSelectedItemTokenId("");
+    setAviso(`“${item.nome}” foi entregue a ${recipient.name}; o jogador recebeu a notificação.`);
   }
   async function enviarMapa(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -301,28 +343,40 @@ export function MapStudio({
                 </div>
               </div>
             )}
-            <svg
-              className="map-threads absolute inset-0 z-[1] size-full"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              {connections.map((connection) => {
-                const from = renderedTokens.find((token) => token.id === connection.fromTokenId);
-                const to = renderedTokens.find((token) => token.id === connection.toTokenId);
-                if (!from || !to) return null;
-                return (
-                  <line
-                    key={connection.id}
-                    x1={from.x * 100}
-                    y1={from.y * 100}
-                    x2={to.x * 100}
-                    y2={to.y * 100}
-                  />
-                );
-              })}
-            </svg>
             {renderedTokens.map((token) => {
+              if (token.itemId) {
+                return (
+                  <button
+                    type="button"
+                    key={token.id}
+                    aria-label={`Item ${token.nome}`}
+                    className={`map-scene-item absolute ${selectedItemTokenId === token.id ? "map-scene-item-selected" : ""}`}
+                    style={{
+                      left: `${token.x * 100}%`,
+                      top: `${token.y * 100}%`,
+                      zIndex: token.zIndex,
+                    }}
+                    onPointerDown={(event) => beginTokenDrag(event, token)}
+                    onPointerMove={dragToken}
+                    onPointerUp={(event) => void endTokenDrag(event)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (collective) return;
+                      setSelecionado(token.id);
+                      setSelectedItemTokenId(token.id);
+                    }}
+                  >
+                    <span className="map-scene-item-visual">
+                      {token.itemImageUrl ? (
+                        <Image src={token.itemImageUrl} alt="" fill sizes="64px" />
+                      ) : (
+                        <Package size={24} />
+                      )}
+                    </span>
+                    <span className="map-token-name">{token.nome}</span>
+                  </button>
+                );
+              }
               const portraitStyle = tokenPortraitStyle(token);
               return (
                 <button
@@ -343,7 +397,6 @@ export function MapStudio({
                   onPointerUp={(event) => void endTokenDrag(event)}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (connectionMode) return void chooseConnection(token.id);
                     if (!collective) setSelecionado(token.id);
                     if (!collective && token.characterId) onSelectCharacter?.(token.characterId);
                   }}
@@ -368,12 +421,6 @@ export function MapStudio({
                     </span>
                   )}
                   <span className="map-token-name">{token.nome}</span>
-                  {connectionSource === token.id && (
-                    <span
-                      className="absolute -inset-2 rounded-full border-2 border-[#ef3347] shadow-[0_0_18px_#d2172b]"
-                      aria-hidden="true"
-                    />
-                  )}
                 </button>
               );
             })}
@@ -416,22 +463,6 @@ export function MapStudio({
               <section className="panel rounded-lg p-4">
                 <Move size={17} className="text-[#d84b57]" />
                 <h3 className="mt-3 font-extrabold">Movimentação</h3>
-                <button
-                  className={`btn mt-3 w-full ${connectionMode ? "btn-primary" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setConnectionMode((value) => !value);
-                    setConnectionSource(null);
-                  }}
-                >
-                  {connectionMode ? <Link2Off size={14} /> : <Link2 size={14} />}
-                  {connectionMode ? "Encerrar conexões" : "Conectar tokens"}
-                </button>
-                {connectionMode && (
-                  <p className="mt-2 text-xs text-[#e8a3aa]">
-                    Clique em dois tokens para criar ou remover o fio vermelho.
-                  </p>
-                )}
                 <label className="mt-3 block text-xs font-bold">
                   Token
                   <select
@@ -471,6 +502,79 @@ export function MapStudio({
                     onChange={(event) => void enviarMapa(event)}
                   />
                 </label>
+              </section>
+              <section className="panel rounded-lg p-4">
+                <Package size={17} className="text-[#d6b56d]" />
+                <h3 className="mt-3 font-extrabold">Itens no mapa</h3>
+                <p className="mt-2 text-xs leading-5 text-[#858890]">
+                  Escolha um item e toque no ponto exato do mapa. Depois toque no item para
+                  entregá-lo.
+                </p>
+                <label className="mt-3 block text-xs font-bold">
+                  Item do catálogo
+                  <select
+                    className="field mt-1"
+                    value={placingItemId}
+                    onChange={(event) => setPlacingItemId(event.target.value)}
+                  >
+                    <option value="">Selecionar item</option>
+                    {items.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {placingItemId && (
+                  <p className="session-notice mt-3">
+                    Modo de posicionamento ativo: toque no mapa para colocar o item.
+                  </p>
+                )}
+                {items.length === 0 && (
+                  <p className="mt-3 text-xs text-[#777a82]">
+                    Cadastre itens na tela “Itens da sessão”.
+                  </p>
+                )}
+                {selectedMapItem && selectedItemToken && (
+                  <div className="map-item-delivery mt-4">
+                    <div className="flex items-center gap-3">
+                      <span className="map-item-delivery-image">
+                        {selectedMapItem.imageUrl ? (
+                          <Image src={selectedMapItem.imageUrl} alt="" fill sizes="48px" />
+                        ) : (
+                          <Package size={20} />
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <strong className="block truncate text-sm">{selectedMapItem.nome}</strong>
+                        <small>Selecionado no mapa</small>
+                      </span>
+                    </div>
+                    <label className="mt-3 block text-xs font-bold">
+                      Entregar para
+                      <select
+                        className="field mt-1"
+                        value={recipientId}
+                        onChange={(event) => setRecipientId(event.target.value)}
+                      >
+                        <option value="">Escolher personagem</option>
+                        {recipientCharacters.map((character) => (
+                          <option key={character.id} value={character.id}>
+                            {character.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      className="btn btn-primary mt-3 w-full"
+                      type="button"
+                      disabled={!recipientId}
+                      onClick={() => void deliverMapItem()}
+                    >
+                      <Gift size={14} /> Entregar e remover do mapa
+                    </button>
+                  </div>
+                )}
               </section>
               {sideContent}
             </>

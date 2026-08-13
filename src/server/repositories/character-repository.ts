@@ -177,7 +177,9 @@ export async function getSessionCharacters(campaignId: string, sessionId: string
     .not("character_id", "is", null);
   if (participantError)
     throw new Error(`Falha ao carregar participantes da sessão: ${participantError.message}`);
-  const characterIds = [...new Set(participants.flatMap((item) => item.character_id ? [item.character_id] : []))];
+  const characterIds = [
+    ...new Set(participants.flatMap((item) => (item.character_id ? [item.character_id] : []))),
+  ];
   if (characterIds.length === 0) return [];
   const { data, error } = await supabase
     .from("characters")
@@ -228,14 +230,17 @@ export async function getAuthorizedCharacter(characterId: string) {
       .eq("id", characterId)
       .maybeSingle();
     if (error) throw new Error(`Falha ao carregar ficha: ${error.message}`);
-    if (data) return (await mapCharactersWithPortraits(supabase, [data as unknown as CharacterRow]))[0];
+    if (data)
+      return (await mapCharactersWithPortraits(supabase, [data as unknown as CharacterRow]))[0];
   }
   const { data: protectedSheet, error: protectedError } = await supabase.rpc(
     "get_player_character_sheet",
     { p_character_id: characterId },
   );
   if (protectedError || !protectedSheet) return null;
-  return (await mapCharactersWithPortraits(supabase, [protectedSheet as unknown as CharacterRow]))[0];
+  return (
+    await mapCharactersWithPortraits(supabase, [protectedSheet as unknown as CharacterRow])
+  )[0];
 }
 
 export async function getCharacterAbilities(characterId: string): Promise<AbilitySummary[]> {
@@ -324,38 +329,80 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
 export async function getCharacterInventory(characterId: string) {
   if (!isSupabaseConfigured) {
     return [
-      { id: "lanterna", itemId: "lanterna", name: "Lanterna tática", description: "Iluminação portátil.", detail: "3 cargas", quantity: 1, charges: 3, ammunition: null, state: "equipado" },
-      { id: "kit", itemId: "kit", name: "Kit de primeiros socorros", description: "Material médico.", detail: "1 uso", quantity: 1, charges: 1, ammunition: null, state: "íntegro" },
-      { id: "lente", itemId: "lente", name: "Lente rachada", description: "Informação ainda protegida.", detail: "informação oculta", quantity: 1, charges: null, ammunition: null, state: "corrompido" },
+      {
+        id: "lanterna",
+        itemId: "lanterna",
+        name: "Lanterna tática",
+        description: "Iluminação portátil.",
+        detail: "3 cargas",
+        quantity: 1,
+        charges: 3,
+        ammunition: null,
+        state: "equipado",
+        imageUrl: undefined,
+      },
+      {
+        id: "kit",
+        itemId: "kit",
+        name: "Kit de primeiros socorros",
+        description: "Material médico.",
+        detail: "1 uso",
+        quantity: 1,
+        charges: 1,
+        ammunition: null,
+        state: "íntegro",
+        imageUrl: undefined,
+      },
+      {
+        id: "lente",
+        itemId: "lente",
+        name: "Lente rachada",
+        description: "Informação ainda protegida.",
+        detail: "informação oculta",
+        quantity: 1,
+        charges: null,
+        ammunition: null,
+        state: "corrompido",
+        imageUrl: undefined,
+      },
     ];
   }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("character_items")
-    .select("id,item_id,quantity,charges,ammunition,state,items(name,description)")
+    .select("id,item_id,quantity,charges,ammunition,state,items(name,description,image_path)")
     .eq("character_id", characterId);
   if (error) throw new Error(`Falha ao carregar inventário: ${error.message}`);
-  return (
-    data as unknown as Array<{
-      id: string;
-      item_id: string;
-      quantity: number;
-      charges: number | null;
-      ammunition: number | null;
-      state: string | null;
-      items: { name: string; description: string | null } | null;
-    }>
-  ).map((item) => ({
-    id: item.id,
-    itemId: item.item_id,
-    name: item.items?.name ?? "Item",
-    description: item.items?.description ?? "",
-    detail: item.charges !== null ? `${item.charges} cargas` : `${item.quantity} unidade(s)`,
-    quantity: item.quantity,
-    charges: item.charges,
-    ammunition: item.ammunition,
-    state: item.state ?? "íntegro",
-  }));
+  const rows = data as unknown as Array<{
+    id: string;
+    item_id: string;
+    quantity: number;
+    charges: number | null;
+    ammunition: number | null;
+    state: string | null;
+    items: { name: string; description: string | null; image_path: string | null } | null;
+  }>;
+  return Promise.all(
+    rows.map(async (item) => {
+      const signed = item.items?.image_path
+        ? await supabase.storage
+            .from("handouts-public")
+            .createSignedUrl(item.items.image_path, 3600)
+        : null;
+      return {
+        id: item.id,
+        itemId: item.item_id,
+        name: item.items?.name ?? "Item",
+        description: item.items?.description ?? "",
+        detail: item.charges !== null ? `${item.charges} cargas` : `${item.quantity} unidade(s)`,
+        quantity: item.quantity,
+        charges: item.charges,
+        ammunition: item.ammunition,
+        state: item.state ?? "íntegro",
+        imageUrl: signed?.data?.signedUrl,
+      };
+    }),
+  );
 }
 
 export async function getAuthorizedMessages() {
@@ -441,14 +488,16 @@ export type PlayerNotebookPage = {
 
 export async function getPlayerNotebookPages(characterId: string): Promise<PlayerNotebookPage[]> {
   if (!isSupabaseConfigured) {
-    return [{
-      id: "demo-notebook-page",
-      pageNumber: 1,
-      title: "Primeiras impressões",
-      content: "Anote aqui suas teorias, suspeitos e relações entre as pistas.",
-      linkedHandoutIds: ["registro"],
-      updatedAt: new Date().toISOString(),
-    }];
+    return [
+      {
+        id: "demo-notebook-page",
+        pageNumber: 1,
+        title: "Primeiras impressões",
+        content: "Anote aqui suas teorias, suspeitos e relações entre as pistas.",
+        linkedHandoutIds: ["registro"],
+        updatedAt: new Date().toISOString(),
+      },
+    ];
   }
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -484,7 +533,8 @@ export async function getAuthorizedInvestigationBoard() {
           y: 0.1 + Math.floor(index / 3) * 0.32,
           rotation: index % 2 ? 2.5 : -2.5,
           zIndex: index + 1,
-          style: index % 2 ? "postit" as const : "paper" as const,
+          style: index % 2 ? ("postit" as const) : ("paper" as const),
+          visibleToPlayers: true,
         },
       })),
       connections: [],
@@ -496,7 +546,8 @@ export async function getAuthorizedInvestigationBoard() {
   const [positionsResult, connectionsResult] = await Promise.all([
     supabase
       .from("investigation_board_items")
-      .select("handout_id,x,y,rotation,z_index,display_style")
+      .select("handout_id,x,y,rotation,z_index,display_style,visible_to_players")
+      .eq("visible_to_players", true)
       .in("handout_id", ids),
     supabase
       .from("investigation_board_connections")
@@ -504,11 +555,15 @@ export async function getAuthorizedInvestigationBoard() {
       .in("from_handout_id", ids)
       .in("to_handout_id", ids),
   ]);
-  if (positionsResult.error) throw new Error(`Falha ao carregar o mural: ${positionsResult.error.message}`);
-  if (connectionsResult.error) throw new Error(`Falha ao carregar conexões: ${connectionsResult.error.message}`);
+  if (positionsResult.error)
+    throw new Error(`Falha ao carregar o mural: ${positionsResult.error.message}`);
+  if (connectionsResult.error)
+    throw new Error(`Falha ao carregar conexões: ${connectionsResult.error.message}`);
   const positions = new Map(positionsResult.data.map((item) => [item.handout_id, item]));
+  const visibleHandouts = handouts.filter((item) => positions.has(item.id));
+  const visibleIds = new Set(visibleHandouts.map((item) => item.id));
   return {
-    items: handouts.map((item) => {
+    items: visibleHandouts.map((item) => {
       const position = positions.get(item.id);
       return {
         ...item,
@@ -518,20 +573,25 @@ export async function getAuthorizedInvestigationBoard() {
         titulo: item.title,
         resumo: item.excerpt,
         conteudo: item.content,
-        board: position ? {
-          x: Number(position.x),
-          y: Number(position.y),
-          rotation: Number(position.rotation),
-          zIndex: position.z_index,
-          style: position.display_style as "polaroid" | "postit" | "paper",
-        } : undefined,
+        board: position
+          ? {
+              x: Number(position.x),
+              y: Number(position.y),
+              rotation: Number(position.rotation),
+              zIndex: position.z_index,
+              style: position.display_style as "polaroid" | "postit" | "paper",
+              visibleToPlayers: true,
+            }
+          : undefined,
       };
     }),
-    connections: connectionsResult.data.map((item) => ({
-      id: item.id,
-      fromHandoutId: item.from_handout_id,
-      toHandoutId: item.to_handout_id,
-    })),
+    connections: connectionsResult.data
+      .filter((item) => visibleIds.has(item.from_handout_id) && visibleIds.has(item.to_handout_id))
+      .map((item) => ({
+        id: item.id,
+        fromHandoutId: item.from_handout_id,
+        toHandoutId: item.to_handout_id,
+      })),
   };
 }
 
@@ -1081,38 +1141,82 @@ export async function getSessionAbilityRequests(sessionId: string): Promise<Abil
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("roll_requests")
-    .select("id,character_id,character_ability_id,status,decision,context,rolled_at,created_at,characters(name),character_abilities(abilities(name))")
+    .select(
+      "id,character_id,character_ability_id,status,decision,context,rolled_at,created_at,characters(name),character_abilities(abilities(name))",
+    )
     .eq("session_id", sessionId)
     .not("character_ability_id", "is", null)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw new Error(`Falha ao carregar solicitações: ${error.message}`);
-  return (data as unknown as Array<{
-    id: string; character_id: string; character_ability_id: string; status: string; decision: string | null;
-    context: string; rolled_at: string | null; created_at: string;
-    characters: { name: string } | null; character_abilities: { abilities: { name: string } | null } | null;
-  }>).map((item) => ({
-    id: item.id, characterId: item.character_id, characterName: item.characters?.name ?? "Personagem",
-    characterAbilityId: item.character_ability_id, abilityName: item.character_abilities?.abilities?.name ?? "Habilidade",
-    status: item.status, decision: item.decision, context: item.context, rolled: Boolean(item.rolled_at), createdAt: item.created_at,
+  return (
+    data as unknown as Array<{
+      id: string;
+      character_id: string;
+      character_ability_id: string;
+      status: string;
+      decision: string | null;
+      context: string;
+      rolled_at: string | null;
+      created_at: string;
+      characters: { name: string } | null;
+      character_abilities: { abilities: { name: string } | null } | null;
+    }>
+  ).map((item) => ({
+    id: item.id,
+    characterId: item.character_id,
+    characterName: item.characters?.name ?? "Personagem",
+    characterAbilityId: item.character_ability_id,
+    abilityName: item.character_abilities?.abilities?.name ?? "Habilidade",
+    status: item.status,
+    decision: item.decision,
+    context: item.context,
+    rolled: Boolean(item.rolled_at),
+    createdAt: item.created_at,
   }));
 }
 
 export type PublicDiceRoll = {
-  id: string; characterId: string | null; characterName: string; purpose: string; formula: string;
-  rolls: number[]; total: number; createdAt: string;
+  id: string;
+  characterId: string | null;
+  characterName: string;
+  purpose: string;
+  formula: string;
+  rolls: number[];
+  total: number;
+  createdAt: string;
 };
 
 export async function getSessionDiceRolls(sessionId: string): Promise<PublicDiceRoll[]> {
   if (!isSupabaseConfigured) return [];
   const supabase = await createClient();
-  const { data, error } = await supabase.from("dice_rolls")
+  const { data, error } = await supabase
+    .from("dice_rolls")
     .select("id,character_id,formula,rolls,total,purpose,created_at,characters(name)")
-    .eq("session_id", sessionId).eq("visibility", "session")
-    .order("created_at", { ascending: false }).limit(20);
+    .eq("session_id", sessionId)
+    .eq("visibility", "session")
+    .order("created_at", { ascending: false })
+    .limit(20);
   if (error) throw new Error(`Falha ao carregar rolagens: ${error.message}`);
-  return (data as unknown as Array<{ id: string; character_id: string | null; formula: string; rolls: number[]; total: number; purpose: string; created_at: string; characters: { name: string } | null }>).map((item) => ({
-    id: item.id, characterId: item.character_id, characterName: item.characters?.name ?? "Jogador",
-    purpose: item.purpose, formula: item.formula, rolls: item.rolls, total: item.total, createdAt: item.created_at,
+  return (
+    data as unknown as Array<{
+      id: string;
+      character_id: string | null;
+      formula: string;
+      rolls: number[];
+      total: number;
+      purpose: string;
+      created_at: string;
+      characters: { name: string } | null;
+    }>
+  ).map((item) => ({
+    id: item.id,
+    characterId: item.character_id,
+    characterName: item.characters?.name ?? "Jogador",
+    purpose: item.purpose,
+    formula: item.formula,
+    rolls: item.rolls,
+    total: item.total,
+    createdAt: item.created_at,
   }));
 }

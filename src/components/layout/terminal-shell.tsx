@@ -12,11 +12,14 @@ import {
   Dices,
   Gauge,
   Home,
+  LogOut,
   Mail,
   Map,
   Menu,
   MessageSquare,
   NotebookPen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Radio,
   ScrollText,
   Settings,
@@ -87,7 +90,9 @@ export function TerminalShell({
   notifications?: PlayerNotification[];
 }) {
   const pathname = usePathname();
+  const sessionWorkspace = area === "master" && pathname.includes("/sessions");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(sessionWorkspace);
   const campaignId = pathname.match(/\/master\/campaigns\/([^/]+)/)?.[1] ?? defaultCampaignId;
   const characterId =
     playerNavigation?.characterId ?? pathname.match(/\/app\/characters\/([^/]+)/)?.[1] ?? "davi";
@@ -99,15 +104,29 @@ export function TerminalShell({
           playerNavigation?.visibleSections ?? [],
           playerNavigation?.sessionId,
         );
-  const sessionWorkspace = area === "master" && pathname.includes("/sessions");
   const isActive = (href: string) => {
     if (href === "/master" || href === "/app") return pathname === href;
     return pathname === href || pathname.startsWith(`${href}/`);
   };
   return (
-    <div className="app-frame terminal-grid" data-session-workspace={sessionWorkspace}>
+    <div
+      className="app-frame terminal-grid"
+      data-session-workspace={sessionWorkspace}
+      data-sidebar-collapsed={sidebarCollapsed}
+    >
       <aside className="app-sidebar" aria-label="Navegação principal">
-        <Brand />
+        <div className="sidebar-brand-row">
+          <Brand compact={sidebarCollapsed} />
+          <button
+            className="sidebar-collapse"
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-label={sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"}
+            title={sidebarCollapsed ? "Expandir barra lateral" : "Recolher barra lateral"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        </div>
         <nav className="sidebar-nav">
           {links.map(([href, label, Icon]) => (
             <Link
@@ -117,16 +136,17 @@ export function TerminalShell({
               data-active={isActive(href)}
               aria-current={isActive(href) ? "page" : undefined}
             >
-              <Icon size={17} aria-hidden="true" /> {label}
+              <Icon size={17} aria-hidden="true" />{" "}
+              <span className="sidebar-link-label">{label}</span>
             </Link>
           ))}
         </nav>
-        <div className="mt-auto border-t border-[#292c32] pt-4">
-          <div className="flex items-center gap-3">
+        <div className="sidebar-footer mt-auto border-t border-[#292c32] pt-4">
+          <div className="sidebar-account flex items-center gap-3">
             <span className="grid size-9 place-items-center rounded bg-[#7d1a25]/30 text-xs font-black text-[#ef9da5]">
               {user.displayName.slice(0, 2).toUpperCase()}
             </span>
-            <span className="min-w-0 flex-1">
+            <span className="sidebar-account-copy min-w-0 flex-1">
               <span className="block truncate text-xs font-extrabold">{user.displayName}</span>
               <span className="block truncate text-[0.65rem] text-[#777a82]">
                 {user.demo ? "modo demonstração" : user.email}
@@ -134,8 +154,12 @@ export function TerminalShell({
             </span>
           </div>
           <form action={signOutAction} className="mt-3">
-            <button type="submit" className="btn btn-ghost w-full justify-start text-xs">
-              Encerrar terminal
+            <button
+              type="submit"
+              className="btn btn-ghost sidebar-signout w-full justify-start text-xs"
+            >
+              <LogOut size={15} />
+              <span>Encerrar terminal</span>
             </button>
           </form>
           {area === "player" && <PwaInstallCard compact />}
