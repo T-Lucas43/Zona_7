@@ -1,0 +1,23 @@
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
+import type { SessionSummaryData, SessionTimelineEntry } from "@/server/repositories/session-history-repository";
+
+function safe(value: unknown) { return String(value ?? "").normalize("NFKD").replace(/[\u0300-\u036f]/g, ""); }
+function wrap(text: string, font: PDFFont, size: number, width: number) {
+  const words = safe(text).split(/\s+/); const lines: string[] = []; let line = "";
+  for (const word of words) { const next = line ? `${line} ${word}` : word; if (font.widthOfTextAtSize(next, size) <= width) line = next; else { if (line) lines.push(line); line = word; } }
+  if (line) lines.push(line); return lines;
+}
+
+export async function buildSessionReportPdf(input: { campaignName: string; sessionTitle: string; summary: SessionSummaryData; timeline: SessionTimelineEntry[]; logo?: Uint8Array }) {
+  const pdf = await PDFDocument.create(); const regular = await pdf.embedFont(StandardFonts.Helvetica); const bold = await pdf.embedFont(StandardFonts.HelveticaBold); const mono = await pdf.embedFont(StandardFonts.Courier);
+  const W = 595.28; const H = 841.89; const M = 42; const ink = rgb(.06,.075,.095); const panel = rgb(.10,.12,.15); const red = rgb(.72,.10,.16); const white = rgb(.96,.96,.95); const muted = rgb(.58,.62,.68); let logo: PDFImage | undefined;
+  if (input.logo) try { logo = await pdf.embedPng(input.logo); } catch { /* capa mantém marca textual */ }
+  const add = () => { const p=pdf.addPage([W,H]); p.drawRectangle({x:0,y:0,width:W,height:H,color:ink}); p.drawRectangle({x:0,y:H-4,width:W,height:4,color:red}); return p; };
+  const header=(p:PDFPage,title:string,section:string)=>{p.drawText("ZONA 7 // A CONVERGENCIA",{x:M,y:H-28,size:7,font:mono,color:muted});p.drawText(section.toUpperCase(),{x:W-M-mono.widthOfTextAtSize(section.toUpperCase(),7),y:H-28,size:7,font:mono,color:muted});p.drawText(safe(title),{x:M,y:H-70,size:23,font:bold,color:white});};
+  const cover=add(); if(logo){const s=Math.min(300/logo.width,180/logo.height);cover.drawImage(logo,{x:(W-logo.width*s)/2,y:H-285,width:logo.width*s,height:logo.height*s});} cover.drawText("RELATORIO POS-SESSAO",{x:M,y:H-390,size:10,font:mono,color:red}); cover.drawText(safe(input.sessionTitle).toUpperCase(),{x:M,y:H-430,size:27,font:bold,color:white}); cover.drawText(safe(input.campaignName),{x:M,y:H-458,size:12,font:regular,color:muted}); cover.drawRectangle({x:M,y:110,width:W-2*M,height:150,color:panel}); let cy=235; for(const line of wrap(input.summary.overview||"Resumo ainda nao preenchido.",regular,11,W-2*M-32).slice(0,9)){cover.drawText(line,{x:M+16,y:cy,size:11,font:regular,color:white});cy-=17;}
+  const sections: Array<[string,string[]]>=[["Decisoes tomadas",input.summary.decisions],["Pistas descobertas",input.summary.clues],["Itens recebidos",input.summary.items],["Condicoes",input.summary.conditions],["Mortes",input.summary.deaths],["Evolucao dos medidores",input.summary.meters],["Assuntos pendentes",input.summary.pendingTopics]];
+  let page=add(); header(page,"Resumo operacional","conteudo da sessao"); let y=H-105;
+  for(const [title,items] of sections){const lines=items.length?items:["Nenhum registro."]; const required=34+lines.reduce((sum,item)=>sum+Math.max(16,wrap(item,regular,9,W-2*M-32).length*13),0); if(y-required<55){page=add();header(page,"Resumo operacional (continuacao)","conteudo da sessao");y=H-105;} page.drawText(title.toUpperCase(),{x:M,y,size:8,font:mono,color:red});y-=17; for(const item of lines){page.drawRectangle({x:M,y:y-5,width:3,height:12,color:red});for(const line of wrap(item,regular,9,W-2*M-30)){page.drawText(line,{x:M+12,y,size:9,font:regular,color:white});y-=13;}y-=6;}y-=12;}
+  page=add();header(page,"Linha do tempo auditavel","eventos e correcoes");y=H-105; for(const entry of input.timeline){if(y<70){page=add();header(page,"Linha do tempo (continuacao)","eventos e correcoes");y=H-105;}page.drawCircle({x:M+4,y:y+2,size:3,color:entry.reversalStatus==="reversed"?muted:red});page.drawText(safe(entry.label),{x:M+16,y,size:9,font:bold,color:white});const time=new Date(entry.createdAt).toLocaleString("pt-BR");page.drawText(time,{x:W-M-regular.widthOfTextAtSize(time,7),y,size:7,font:regular,color:muted});y-=14;page.drawText(safe(entry.entity+(entry.reversalStatus==="reversed"?" - DESFEITO":"")),{x:M+16,y,size:7,font:mono,color:muted});y-=19;}
+  const pages=pdf.getPages(); pages.forEach((p,index)=>{const label=`${String(index+1).padStart(2,"0")} / ${String(pages.length).padStart(2,"0")}`;p.drawText(label,{x:W-M-mono.widthOfTextAtSize(label,6),y:20,size:6,font:mono,color:muted});}); return pdf.save();
+}

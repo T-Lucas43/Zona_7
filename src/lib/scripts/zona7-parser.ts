@@ -76,7 +76,22 @@ export type ScriptIssue = {
   code: string;
   message: string;
   nodeId?: string;
+  line?: number;
+  column?: number;
+  suggestion?: string;
 };
+
+const portugueseVariableKey = /^[a-zà-ÿ_][a-z0-9à-ÿ_]*$/i;
+const reservedEnglishVariables = new Map([
+  ["zone_pressure", "pressao_zona"],
+  ["pressure", "pressao_zona"],
+  ["scene", "cena_atual"],
+  ["round", "rodada_atual"],
+  ["turn", "turno_atual"],
+  ["successes", "sucessos"],
+  ["failures", "falhas"],
+  ["synchronized_targets", "alvos_sincronizados"],
+]);
 
 // A fórmula pode ser uma rolagem fixa (ex.: 2d20+5) ou uma referência que
 // será resolvida com os valores atuais da ficha quando o nó for executado.
@@ -189,6 +204,13 @@ function normalizeJson(source: string): Zona7Script {
 
 export function validateZona7Script(document: Zona7Script) {
   const issues: ScriptIssue[] = [];
+  for (const key of Object.keys(document.variables)) {
+    if (!portugueseVariableKey.test(key))
+      issues.push({ severity: "error", code: "invalid_variable", message: `A variável “${key}” usa caracteres não permitidos.`, suggestion: "Use letras, números e sublinhado, começando por uma letra." });
+    const suggestion = reservedEnglishVariables.get(key.toLowerCase());
+    if (suggestion)
+      issues.push({ severity: "error", code: "variable_in_portuguese", message: `A variável “${key}” está em inglês e não pode ser publicada.`, suggestion: `Use “${suggestion}” para manter o roteiro em português.` });
+  }
   const ids = new Set<string>();
   for (const node of document.nodes) {
     if (ids.has(node.id))
@@ -253,4 +275,26 @@ export function parseZona7Script(source: string, format: "markdown" | "json") {
     issues: validateZona7Script(document),
     normalizedMarkdown: stringify(document),
   };
+}
+
+function extractLocation(message: string) {
+  const match = message.match(/(?:at line|line)\s+(\d+),\s*(?:column|col)\s+(\d+)/i);
+  return match ? { line: Number(match[1]), column: Number(match[2]) } : {};
+}
+
+export function explainScriptError(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const location = extractLocation(raw);
+  const implicitKey = raw.match(/Implicit keys need to be on a single line[\s\S]*?:\s*([^\n]+)/i)?.[1]?.trim();
+  if (/Implicit keys need to be on a single line/i.test(raw)) {
+    const key = implicitKey?.split(/[\s:]/)[0] ?? "a chave indicada";
+    return { message: `A chave “${key}” precisa ficar inteira em uma única linha.`, ...location, suggestion: "Revise a indentação e escreva no formato chave: valor. Para listas, coloque cada item em uma linha iniciada por dois espaços e um hífen.", technical: raw };
+  }
+  if (/bad indentation|indentation|All collection items must start/i.test(raw))
+    return { message: "A indentação do YAML está incorreta.", ...location, suggestion: "Use dois espaços por nível e não utilize tabulação.", technical: raw };
+  if (/Unexpected scalar|unexpected token|end of the stream/i.test(raw))
+    return { message: "Há um valor ou marcador incompleto no roteiro.", ...location, suggestion: "Confira aspas, dois-pontos, colchetes e os marcadores :::zona7 próximos dessa posição.", technical: raw };
+  if (raw.startsWith("["))
+    return { message: "Alguns campos do roteiro estão fora do formato esperado.", ...location, suggestion: "Carregue o modelo pronto e compare os nomes e tipos dos campos.", technical: raw };
+  return { message: raw, ...location, suggestion: "Confira o trecho indicado ou carregue o modelo pronto para comparar a estrutura.", technical: raw };
 }

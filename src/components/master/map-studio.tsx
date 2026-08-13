@@ -4,6 +4,9 @@ import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Gift,
+  Brush,
+  Eraser,
+  EyeOff,
   ImageUp,
   Map,
   Move,
@@ -11,10 +14,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Trash2,
+  Undo2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { getCharacterPortraitStyle } from "@/components/character/character-portrait";
+import { MapRevealLayer } from "@/components/master/map-reveal-layer";
 import type { CenaDaCampanha, ItemDaCampanha } from "@/server/repositories/master-repository";
 
 function tokenPortraitStyle(token: CenaDaCampanha["tokens"][number]): React.CSSProperties | null {
@@ -37,12 +42,14 @@ function tokenBodyProfile(token: CenaDaCampanha["tokens"][number]) {
 
 export function MapStudio({
   campaignId,
+  sessionId,
   initialScene,
   collective = false,
   hiddenCharacterIds = [],
   allowedCharacterIds,
   selectedCharacterId,
   onSelectCharacter,
+  onSelectToken,
   stackControls = false,
   workspace = false,
   sideContent,
@@ -50,12 +57,14 @@ export function MapStudio({
   recipientCharacters = [],
 }: {
   campaignId: string;
+  sessionId?: string;
   initialScene: CenaDaCampanha;
   collective?: boolean;
   hiddenCharacterIds?: string[];
   allowedCharacterIds?: string[];
   selectedCharacterId?: string;
   onSelectCharacter?: (characterId: string) => void;
+  onSelectToken?: (token: CenaDaCampanha["tokens"][number]) => void;
   stackControls?: boolean;
   workspace?: boolean;
   sideContent?: React.ReactNode;
@@ -73,6 +82,10 @@ export function MapStudio({
   const [placingItemId, setPlacingItemId] = useState("");
   const [selectedItemTokenId, setSelectedItemTokenId] = useState("");
   const [recipientId, setRecipientId] = useState(recipientCharacters[0]?.id ?? "");
+  const [reveal, setReveal] = useState(initialScene.reveal);
+  const [revealEditing, setRevealEditing] = useState(false);
+  const [revealTool, setRevealTool] = useState<"cover" | "erase">("cover");
+  const [revealBrush, setRevealBrush] = useState(.05);
   const mapa = useRef<HTMLDivElement>(null);
   const availableTokens = useMemo(
     () =>
@@ -94,6 +107,23 @@ export function MapStudio({
   const selectedItemToken = cena.tokens.find((token) => token.id === selectedItemTokenId);
   const selectedMapItem = items.find((item) => item.id === selectedItemToken?.itemId);
   const nextZIndex = () => Math.max(0, ...cena.tokens.map((token) => token.zIndex)) + 1;
+
+  async function saveReveal(next: typeof reveal, synchronized: boolean) {
+    if (!sessionId) return setAviso("Inicie uma sessão para editar a ocultação do mapa.");
+    if (!synchronized) {
+      const desync = await fetch("/api/master/session/scene-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: false }) });
+      if (!desync.ok) return setAviso("Não foi possível dessincronizar a cena com segurança.");
+    }
+    const response = await fetch("/api/master/map/reveal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: next.enabled, synchronized, paths: next.paths }) });
+    const result = await response.json() as { version?: number; error?: string };
+    if (!response.ok) return setAviso(result.error ?? "Não foi possível salvar a máscara.");
+    const saved = { ...next, synchronized, version: result.version ?? next.version + 1 }; setReveal(saved);
+    if (synchronized) {
+      const sync = await fetch("/api/master/session/scene-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: true }) });
+      if (!sync.ok) return setAviso("A máscara foi salva, mas a cena continua dessincronizada.");
+      setRevealEditing(false); setAviso("Máscara publicada. A revelação foi atualizada em tempo real para todos os jogadores.");
+    } else { setRevealEditing(true); setAviso("Cena dessincronizada. Edite a máscara sem revelar segredos aos jogadores."); }
+  }
 
   async function persistToken(tokenId: string, x: number, y: number, zIndex: number) {
     const response = await fetch("/api/master/map/move", {
@@ -219,6 +249,7 @@ export function MapStudio({
       body: JSON.stringify({
         kind: "item",
         campaignId,
+        sessionId,
         targetCharacterIds: [recipient.id],
         name: item.nome,
         description: item.descricao,
@@ -392,6 +423,7 @@ export function MapStudio({
                       if (collective) return;
                       setSelecionado(token.id);
                       setSelectedItemTokenId(token.id);
+                      onSelectToken?.(token);
                     }}
                   >
                     <span className="map-scene-item-visual">
@@ -426,6 +458,7 @@ export function MapStudio({
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!collective) setSelecionado(token.id);
+                    if (!collective) onSelectToken?.(token);
                     if (!collective && token.characterId) onSelectCharacter?.(token.characterId);
                   }}
                 >
@@ -452,6 +485,7 @@ export function MapStudio({
                 </button>
               );
             })}
+            <MapRevealLayer reveal={reveal} interactive={!collective && revealEditing} tool={revealTool} brushSize={revealBrush} onCommit={(path) => setReveal((value) => ({ ...value, enabled: true, synchronized: false, paths: [...value.paths, path] }))} />
           </div>
         </div>
         {collective && (
@@ -517,6 +551,18 @@ export function MapStudio({
                   Arraste o token livremente ou selecione-o e clique no mapa. O servidor registra
                   posição, ordem visual e responsável.
                 </p>
+              </section>
+              <section className="panel rounded-lg p-4">
+                <EyeOff size={17} className="text-[#d84b57]" />
+                <h3 className="mt-3 font-extrabold">Ocultação e revelação</h3>
+                <p className="mt-2 text-xs leading-5 text-[#858890]">Circule com a caneta para cobrir uma área de preto. Use a borracha para revelar aos poucos. A cena é dessincronizada antes da edição.</p>
+                {!revealEditing ? <button className="btn mt-3 w-full" type="button" disabled={!sessionId} onClick={() => void saveReveal({ ...reveal, enabled: true }, false)}><EyeOff size={14} /> Dessincronizar e editar</button> : <>
+                  <div className="mt-3 grid grid-cols-2 gap-2"><button className={`btn ${revealTool === "cover" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("cover")}><Brush size={14} /> Caneta preta</button><button className={`btn ${revealTool === "erase" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("erase")}><Eraser size={14} /> Borracha</button></div>
+                  <label className="mt-3 block text-xs font-bold">Tamanho da borracha/caneta<input className="mt-2 w-full accent-[#c92131]" type="range" min="1" max="20" value={Math.round(revealBrush * 100)} onChange={(event) => setRevealBrush(Number(event.target.value) / 100)} /></label>
+                  <div className="mt-3 flex gap-2"><button className="btn flex-1" type="button" disabled={!reveal.paths.length} onClick={() => setReveal((value) => ({ ...value, paths: value.paths.slice(0, -1) }))}><Undo2 size={14} /> Desfazer traço</button><button className="btn flex-1" type="button" onClick={() => setReveal((value) => ({ ...value, paths: [] }))}><Trash2 size={14} /> Limpar</button></div>
+                  <button className="btn mt-2 w-full" type="button" onClick={() => void saveReveal(reveal, false)}>Salvar rascunho oculto</button>
+                  <button className="btn btn-primary mt-2 w-full" type="button" onClick={() => void saveReveal({ ...reveal, enabled: true }, true)}>Sincronizar revelação</button>
+                </>}
               </section>
               <section className="panel rounded-lg p-4">
                 <ImageUp size={17} className="text-[#d84b57]" />

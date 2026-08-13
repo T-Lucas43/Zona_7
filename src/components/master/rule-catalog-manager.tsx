@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Braces, Check, RotateCcw, Save, X } from "lucide-react";
+import { Braces, Check, History, RotateCcw, Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RuleCatalogEntry } from "@/server/repositories/rules-repository";
 
@@ -42,6 +42,17 @@ export function RuleCatalogManager({ campaignId, initialRules }: { campaignId: s
     }
   }
 
+  async function restore(logId: string) {
+    if (!selected) return;
+    setPending(true); setNotice("");
+    const response = await fetch("/api/master/rules/history", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, ruleDefinitionId: selected.id, logId, reason: reason.trim() || "Restauração de versão anterior" }) });
+    const result = await response.json() as { error?: string; version?: number };
+    setPending(false);
+    if (!response.ok) return setNotice(result.error ?? "Falha ao restaurar versão.");
+    setNotice(`Versão anterior restaurada como nova versão ${result.version ?? "publicada"}.`);
+    router.refresh();
+  }
+
   return (
     <div className="rule-manager">
       <aside className="rule-list panel">
@@ -76,9 +87,20 @@ export function RuleCatalogManager({ campaignId, initialRules }: { campaignId: s
             <button className="btn" type="button" onClick={() => setPayload(JSON.stringify(selected.basePayload, null, 2))}><RotateCcw size={14} /> Usar base no editor</button>
             {notice && <p className={notice.includes("publicado") ? "rule-notice success" : "rule-notice"}><X size={13} /> {notice}</p>}
           </div>
+          <details className="rule-history mt-4 rounded-lg border border-[#343841] p-3">
+            <summary className="flex cursor-pointer items-center gap-2 text-sm font-bold"><History size={14} /> Histórico e comparação</summary>
+            <div className="mt-3 space-y-2">
+              {selected.history.map((entry, index) => <article className="rounded border border-[#2d3139] bg-black/15 p-3" key={entry.id}>
+                <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-xs">Versão histórica {selected.history.length - index}</strong><time className="text-[0.65rem] text-[#777a82]">{new Date(entry.createdAt).toLocaleString("pt-BR")}</time></div>
+                <p className="mt-1 text-xs text-[#9da1aa]">{entry.reason}</p>
+                <details className="mt-2"><summary className="cursor-pointer text-xs text-[#e5b869]">Ver alterações</summary><div className="mt-2 grid gap-2 md:grid-cols-2"><pre className="rule-diff">Antes\n{JSON.stringify(entry.before, null, 2)}</pre><pre className="rule-diff">Depois\n{JSON.stringify(entry.after, null, 2)}</pre></div></details>
+                {entry.after && <button className="btn mt-2" type="button" disabled={pending} onClick={() => void restore(entry.id)}><RotateCcw size={13} /> Restaurar como nova versão</button>}
+              </article>)}
+              {selected.history.length === 0 && <p className="text-xs text-[#777a82]">A primeira alteração publicada aparecerá aqui.</p>}
+            </div>
+          </details>
         </section>
       ) : <section className="panel rounded-xl p-6">Nenhuma regra cadastrada.</section>}
     </div>
   );
 }
-

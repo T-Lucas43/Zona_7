@@ -8,7 +8,7 @@ import { getScriptRunSnapshot } from "@/server/repositories/script-repository";
 const schema = z.object({
   campaignId: z.string().min(1).max(100),
   sessionId: z.string().min(1).max(100),
-  action: z.enum(["start", "advance", "pause", "resume", "improvise", "complete"]),
+  action: z.enum(["start", "advance", "rewind", "pause", "resume", "improvise", "complete"]),
   scriptPackageId: z.string().min(1).max(100).optional(),
   runId: z.string().min(1).max(100).optional(),
   targetNodeKey: z.string().min(2).max(80).optional(),
@@ -38,7 +38,10 @@ export async function POST(request: Request) {
         demo: true,
       });
     const supabase = await createClient();
-    const { data, error } = await supabase.rpc("control_session_script_run", {
+    const { data, error } = input.action === "rewind" ? await supabase.rpc("rewind_session_script_run", {
+      p_campaign_id: input.campaignId, p_session_id: input.sessionId, p_run_id: input.runId,
+      p_actor_user_id: user.id, p_reason: input.reason, p_idempotency_key: input.idempotencyKey,
+    }) : await supabase.rpc("control_session_script_run", {
       p_campaign_id: input.campaignId,
       p_session_id: input.sessionId,
       p_actor_user_id: user.id,

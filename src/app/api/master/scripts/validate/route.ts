@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseZona7Script } from "@/lib/scripts/zona7-parser";
+import { explainScriptError, parseZona7Script } from "@/lib/scripts/zona7-parser";
 import { requireCampaignMaster } from "@/server/services/master-access";
 
 const schema = z.object({
@@ -15,9 +15,6 @@ export async function POST(request: Request) {
     await requireCampaignMaster(input.campaignId);
     return NextResponse.json(parseZona7Script(input.source, input.format));
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Roteiro inválido." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: explainScriptError(error) }, { status: 400 });
   }
 }

@@ -66,6 +66,7 @@ import {
 import { requireCampaignMaster } from "@/server/services/master-access";
 import { getSessionScriptRun } from "@/server/repositories/script-repository";
 import { getRuleCatalog } from "@/server/repositories/rules-repository";
+import { getLatestSessionSummary, getSessionTimeline } from "@/server/repositories/session-history-repository";
 
 async function optionalSessionModule<T>(
   label: string,
@@ -139,6 +140,8 @@ async function SessionConsole({
     solicitacoes,
     testesSolicitados,
     rolagens,
+    timeline,
+    latestSummary,
   ] = await Promise.all([
     optionalSessionModule(
       "personagens conectados",
@@ -182,6 +185,8 @@ async function SessionConsole({
       [],
     ),
     optionalSessionModule("rolagens publicas", () => getSessionDiceRolls(session.id), []),
+    optionalSessionModule("linha do tempo", () => getSessionTimeline(campaignId, session.id), []),
+    optionalSessionModule("resumo da sessao", () => getLatestSessionSummary(session.id), null),
   ]);
   if (!cena) {
     return (
@@ -232,6 +237,9 @@ async function SessionConsole({
         ]),
         solicitacoes.map((request) => [request.id, request.decision, request.rolled]),
         rolagens.map((roll) => [roll.id, roll.total]),
+        timeline.map((event) => [event.id, event.reversalStatus]),
+        latestSummary?.revision,
+        cena.reveal.version,
         sceneState.enabled,
       ])}
       campaignId={campaignId}
@@ -254,6 +262,8 @@ async function SessionConsole({
       initialCheckRequests={testesSolicitados}
       initialRolls={rolagens}
       initialSceneSyncEnabled={sceneState.enabled}
+      initialTimeline={timeline}
+      initialSessionSummary={latestSummary}
       visibleCharacterIds={atoresVisiveis.flatMap((ator) =>
         ator.characterId && elenco.some((character) => character.id === ator.characterId)
           ? [ator.characterId]

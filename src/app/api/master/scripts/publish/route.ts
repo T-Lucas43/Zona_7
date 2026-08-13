@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isSupabaseConfigured } from "@/lib/config";
-import { parseZona7Script } from "@/lib/scripts/zona7-parser";
+import { explainScriptError, parseZona7Script } from "@/lib/scripts/zona7-parser";
 import { createClient } from "@/lib/supabase/server";
 import { requireCampaignMaster } from "@/server/services/master-access";
 
@@ -146,9 +146,6 @@ export async function POST(request: Request) {
     if (packagePublishError) throw new Error(packagePublishError.message);
     return NextResponse.json({ id: pacote.id, version, title: parsed.document.title }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Falha ao publicar roteiro." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: explainScriptError(error) }, { status: 400 });
   }
 }

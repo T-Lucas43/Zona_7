@@ -83,6 +83,16 @@ async function normalizeOrder(supabase: SupabaseClient, campaignId: string, enco
   }));
 }
 
+async function snapshotInitiative(supabase: SupabaseClient, campaignId: string, encounterId: string) {
+  const [{ data: encounter, error: encounterError }, { data, error }] = await Promise.all([
+    supabase.from("encounters").select("current_turn_position,session_id").eq("id", encounterId).eq("campaign_id", campaignId).single(),
+    supabase.from("encounter_combatants").select("id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state,actions_state,private_notes,initiative_bonus,agility").eq("encounter_id", encounterId).eq("campaign_id", campaignId).order("position"),
+  ]);
+  if (encounterError) throw new Error(encounterError.message);
+  if (error) throw new Error(error.message);
+  return { combatants: data, turnPosition: encounter.current_turn_position, sessionId: encounter.session_id as string | null };
+}
+
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
@@ -91,6 +101,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ combatentes: [], demo: true });
     }
     const supabase = await createClient();
+    const before = await snapshotInitiative(supabase, input.campaignId, input.encounterId);
     if (input.action === "add") {
       const { error } = await supabase.from("encounter_combatants").insert({
         campaign_id: input.campaignId,
@@ -134,12 +145,14 @@ export async function POST(request: Request) {
     }
     const { error: auditError } = await supabase.from("audit_events").insert({
       campaign_id: input.campaignId,
+      session_id: before.sessionId,
       encounter_id: input.encounterId,
       actor_user_id: user.id,
       entity_type: "encounter",
       entity_id: input.encounterId,
       event_type: `initiative_${input.action}`,
       visibility: "gm_only",
+      before_data: { combatants: before.combatants, turnPosition: before.turnPosition },
       after_data: { combatants: combatentes },
       idempotency_key: crypto.randomUUID(),
     });

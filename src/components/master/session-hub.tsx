@@ -18,6 +18,7 @@ import {
   ShieldAlert,
   Sparkles,
   Swords,
+  Trash2,
   WandSparkles,
   UserRound,
   Users,
@@ -33,6 +34,8 @@ import { SessionClock } from "@/components/master/session-clock";
 import { SessionScriptControl } from "@/components/master/session-script-control";
 import { SessionOperations } from "@/components/master/session-operations";
 import { SessionInitiativeStrip } from "@/components/master/session-initiative-strip";
+import { SessionTimeline } from "@/components/master/session-timeline";
+import { SessionSummaryManager } from "@/components/master/session-summary-manager";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
@@ -48,6 +51,7 @@ import type {
 } from "@/server/repositories/master-repository";
 import type { SessionPublicState } from "@/server/repositories/session-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
+import type { SessionSummaryData, SessionTimelineEntry } from "@/server/repositories/session-history-repository";
 import type {
   AbilityUseRequest,
   CharacterCheckRequest,
@@ -90,6 +94,8 @@ export function SessionHub({
   initialRolls,
   initialSceneSyncEnabled,
   visibleCharacterIds,
+  initialTimeline,
+  initialSessionSummary,
 }: {
   campaignId: string;
   session: SessionSummary;
@@ -110,6 +116,8 @@ export function SessionHub({
   initialRolls: PublicDiceRoll[];
   initialSceneSyncEnabled: boolean;
   visibleCharacterIds: string[];
+  initialTimeline: SessionTimelineEntry[];
+  initialSessionSummary: SessionSummaryData | null;
 }) {
   const [characters, setCharacters] = useState(initialCharacters);
   const [details, setDetails] = useState(characterDetails);
@@ -135,6 +143,7 @@ export function SessionHub({
   const [sceneSyncEnabled, setSceneSyncEnabled] = useState(initialSceneSyncEnabled);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [liveEncounters, setLiveEncounters] = useState(encounters);
+  const [sceneSelection, setSceneSelection] = useState<CenaDaCampanha["tokens"][number] | null>(null);
   const selected = useMemo(
     () => characters.find((item) => item.id === selectedId) ?? characters[0],
     [characters, selectedId],
@@ -150,6 +159,13 @@ export function SessionHub({
   const preparedCheck =
     initialCheckRequests.find((request) => request.characterId === selected?.id) ??
     initialCheckRequests[0];
+  const currentCombatant = activeEncounter?.combatentes.find((combatant) => combatant.atual);
+  const normalizeName = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const selectedCanAct = Boolean(selected) && !["dying", "dead"].includes(selected?.characterState ?? "active") && !selected?.conditions.some((condition) => /morto|inconsciente|incapacitado/i.test(condition));
+  const selectedHasTurn = !currentCombatant || (selected ? normalizeName(currentCombatant.nome).includes(normalizeName(selected.name).split(" ")[0]) : false);
+  const selectedHasEnergy = (selected?.resources.pe.current ?? 0) > 0;
+  const selectedToken = scene.tokens.find((token) => token.characterId === selected?.id);
+  const nearestThreat = selectedToken ? scene.tokens.filter((token) => token.atorId && ["threat", "entity", "npc"].includes(token.actorType ?? "")).map((token) => ({ token, distance: Math.hypot((token.x - selectedToken.x) * 16, (token.y - selectedToken.y) * 9) })).sort((a, b) => a.distance - b.distance)[0] : undefined;
   function focusControl(id: string) {
     window.requestAnimationFrame(() =>
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }),
@@ -216,6 +232,14 @@ export function SessionHub({
     });
     setNotice(`${selected.name} ${next ? "voltou à" : "foi ocultado da"} tela dos jogadores.`);
   }
+  async function actorSceneAction(action: "hide" | "show" | "remove") {
+    if (!sceneSelection?.atorId) return;
+    const response = await fetch("/api/master/session/actors", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sceneId: scene.id, actorId: sceneSelection.atorId, action }) });
+    const result = await response.json() as { error?: string };
+    if (!response.ok) return setNotice(result.error ?? "Não foi possível atualizar a entidade.");
+    setNotice(`${sceneSelection.nome}: ${action === "remove" ? "retirado da cena" : action === "show" ? "revelado aos jogadores" : "ocultado dos jogadores"}.`);
+    if (action === "remove") setSceneSelection(null);
+  }
 
   async function changeAbilityState(abilityId: string, state: "unlocked" | "sealed") {
     if (!selected) return;
@@ -258,6 +282,7 @@ export function SessionHub({
         ? {
             kind: "item",
             campaignId,
+            sessionId: session.id,
             targetCharacterIds,
             name: deliveryName,
             description: deliveryDetails,
@@ -266,6 +291,7 @@ export function SessionHub({
         : {
             kind: "handout",
             campaignId,
+            sessionId: session.id,
             targetCharacterIds,
             title: deliveryName,
             publicExcerpt: deliveryDetails,
@@ -454,6 +480,7 @@ export function SessionHub({
         <div className="session-map-column">
           <MapStudio
             campaignId={campaignId}
+            sessionId={session.id}
             initialScene={scene}
             hiddenCharacterIds={characters
               .filter((character) => !visible.has(character.id))
@@ -464,6 +491,7 @@ export function SessionHub({
               setSelectedId(characterId);
               setMessageReview(false);
             }}
+            onSelectToken={setSceneSelection}
             items={items}
             recipientCharacters={characters.map((character) => ({
               id: character.id,
@@ -500,6 +528,7 @@ export function SessionHub({
                 />
                 </div>
                 <LiveRollFeed rolls={initialRolls} />
+                <SessionTimeline campaignId={campaignId} sessionId={session.id} initialEntries={initialTimeline} />
                 <form
                   className="panel rounded-lg p-4"
                   id="transmissao-sessao"
@@ -669,11 +698,16 @@ export function SessionHub({
                       ))}
                     </div>
                   </div>
+                  <div className="mt-3 rounded-lg border border-[#313943] bg-[#080c11]/70 p-3">
+                    <div className="flex items-center justify-between gap-2"><strong className="text-xs">Central contextual</strong><span className={`tag ${selectedCanAct && selectedHasTurn ? "text-[#7bd5a5]" : "text-[#f0a5ad]"}`}>{selectedCanAct && selectedHasTurn ? "Ações liberadas" : "Ações restritas"}</span></div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[0.65rem]"><span className="tag">{currentCombatant ? selectedHasTurn ? "Turno atual" : `Turno de ${currentCombatant.nome}` : "Fora de combate"}</span><span className="tag">PE {selected.resources.pe.current}/{selected.resources.pe.maximum}</span>{nearestThreat && <span className="tag">Ameaça a {nearestThreat.distance.toFixed(1)} quadrados</span>}{selected.conditions.map((condition) => <span className="tag text-[#e8a36b]" key={condition}>{condition}</span>)}</div>
+                    {!selectedCanAct && <p className="mt-2 text-xs text-[#f0a5ad]">Este personagem está sem ações por sua condição atual.</p>}
+                  </div>
                   <div className="session-character-actions">
-                    <button type="button" onClick={() => { setResource("pv"); setAmount(5); focusControl("controle-recursos-personagem"); }}>
+                    <button type="button" disabled={!selectedCanAct} onClick={() => { setResource("pv"); setAmount(5); focusControl("controle-recursos-personagem"); }}>
                       <Swords size={18} /><span>Aplicar dano</span>
                     </button>
-                    <button type="button" onClick={() => focusControl("operacoes-sessao")}><BookOpen size={18} /><span>Solicitar teste</span></button>
+                    <button type="button" disabled={!selectedCanAct || !selectedHasTurn} onClick={() => focusControl("operacoes-sessao")}><BookOpen size={18} /><span>Solicitar teste</span></button>
                     <button type="button" onClick={() => { setMessageReview(false); focusControl("mensagem-imediata"); }}>
                       <MessageSquare size={18} /><span>Enviar mensagem</span>
                     </button>
@@ -683,7 +717,7 @@ export function SessionHub({
                     <button type="button" onClick={() => { setDeliveryKind("handout"); focusControl("entrega-central"); }}>
                       <Eye size={18} /><span>Revelar pista</span>
                     </button>
-                    <button type="button" onClick={() => { setSheetTab("abilities"); focusControl("ficha-central-personagem"); }}>
+                    <button type="button" disabled={!selectedHasEnergy} onClick={() => { setSheetTab("abilities"); focusControl("ficha-central-personagem"); }}>
                       <Sparkles size={18} /><span>Liberar habilidade</span>
                     </button>
                   </div>
@@ -771,6 +805,13 @@ export function SessionHub({
               ) : (
                 <section className="panel rounded-lg border-dashed p-4 text-sm text-[#858890]">
                   As ações aparecerão quando um jogador entrar.
+                </section>
+              )}
+
+              {sceneSelection && !sceneSelection.characterId && (
+                <section className="panel rounded-lg p-4">
+                  <p className="eyebrow">seleção do mapa</p><h2 className="mt-1 font-extrabold">{sceneSelection.nome}</h2>
+                  {sceneSelection.itemId ? <><p className="mt-2 text-xs text-[#858890]">Item selecionado. A entrega ou remoção fica disponível nas ferramentas do mapa.</p><button className="btn mt-3 w-full" type="button" onClick={() => focusControl("mapa-sessao")}><Package size={14} /> Abrir ações do item</button></> : <><p className="mt-2 text-xs text-[#858890]">Entidade ou NPC selecionado. A alteração é sincronizada sem recarregar a página.</p><div className="mt-3 grid grid-cols-2 gap-2"><button className="btn" type="button" onClick={() => void actorSceneAction("hide")}><EyeOff size={14} /> Ocultar</button><button className="btn" type="button" onClick={() => void actorSceneAction("show")}><Eye size={14} /> Revelar</button><button className="btn col-span-2 text-[#f0a5ad]" type="button" onClick={() => void actorSceneAction("remove")}><Trash2 size={14} /> Retirar da cena</button></div></>}
                 </section>
               )}
 
@@ -1127,6 +1168,9 @@ export function SessionHub({
             </div>
           )}
         </aside>
+      </div>
+      <div className="mt-3">
+        <SessionSummaryManager campaignId={campaignId} sessionId={session.id} sessionTitle={session.title} initialSummary={initialSessionSummary} />
       </div>
     </div>
   );

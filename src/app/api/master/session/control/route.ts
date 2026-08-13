@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { sessionControlSchema } from "@/lib/validation/schemas";
 import { advanceSessionTurnSynced, controlSessionRuntime } from "@/server/services/domain-service";
 import { requireCampaignMaster } from "@/server/services/master-access";
+import { generateAutomaticSessionSummary } from "@/server/services/session-summary-service";
 
 export async function POST(request: Request) {
   try {
@@ -29,6 +30,10 @@ export async function POST(request: Request) {
         action: input.action,
         idempotencyKey: crypto.randomUUID(),
       });
+    }
+    if (input.action === "end") {
+      const summary = await generateAutomaticSessionSummary({ campaignId: input.campaignId, sessionId: input.sessionId, actorUserId: user.id });
+      return NextResponse.json({ ...(result as Record<string, unknown>), summaryRevision: summary.revision });
     }
     return NextResponse.json(result);
   } catch (error) {

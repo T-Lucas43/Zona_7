@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseZona7Script } from "@/lib/scripts/zona7-parser";
+import { explainScriptError, parseZona7Script } from "@/lib/scripts/zona7-parser";
 
 const valid = `---
 zona7_script_version: 1
@@ -58,5 +58,16 @@ describe("roteiro Zona 7", () => {
     );
     const result = parseZona7Script(source, "markdown");
     expect(result.issues.some((issue) => issue.code === "invalid_formula")).toBe(false);
+  });
+  it("orienta a correção do YAML em português com linha e coluna", () => {
+    const explained = explainScriptError(new Error("Implicit keys need to be on a single line at line 14, column 1: synchronized_targets: master"));
+    expect(explained.message).toMatch(/precisa ficar inteira/i);
+    expect(explained.line).toBe(14);
+    expect(explained.column).toBe(1);
+    expect(explained.suggestion).toMatch(/indentação/i);
+  });
+  it("avisa quando uma variável conhecida está em inglês", () => {
+    const result = parseZona7Script(valid.replace("pressao: 0", "zone_pressure: 0"), "markdown");
+    expect(result.issues).toContainEqual(expect.objectContaining({ severity: "error", code: "variable_in_portuguese", suggestion: expect.stringMatching(/pressao_zona/) }));
   });
 });

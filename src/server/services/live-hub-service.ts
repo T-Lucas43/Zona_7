@@ -77,6 +77,14 @@ export async function deliverSessionContent(input: unknown, actorUserId: string)
           p_idempotency_key: idempotencyKey,
         });
   if (result.error) throw new Error(result.error.message);
+  if (value.sessionId && result.data) {
+    const attachment = await supabase.rpc("attach_audit_event_to_session", {
+      p_event_id: result.data,
+      p_session_id: value.sessionId,
+      p_actor_user_id: actorUserId,
+    });
+    if (attachment.error) throw new Error(attachment.error.message);
+  }
   return { id: result.data };
 }
 

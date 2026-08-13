@@ -80,6 +80,7 @@ export const deliverySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("item"),
     campaignId: z.uuid(),
+    sessionId: z.uuid().optional(),
     targetCharacterIds: z.array(z.string().min(2).max(100)).min(1).max(100),
     name: z.string().trim().min(2).max(160),
     description: z.string().trim().max(5000).default(""),
@@ -88,6 +89,7 @@ export const deliverySchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("handout"),
     campaignId: z.uuid(),
+    sessionId: z.uuid().optional(),
     targetCharacterIds: z.array(z.string().min(2).max(100)).min(1).max(100),
     title: z.string().trim().min(2).max(200),
     publicExcerpt: z.string().trim().max(1000).default(""),

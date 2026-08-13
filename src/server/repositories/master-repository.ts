@@ -134,6 +134,17 @@ export type CenaDaCampanha = {
     visivel: boolean;
   }>;
   connections: Array<{ id: string; fromTokenId: string; toTokenId: string }>;
+  reveal: {
+    enabled: boolean;
+    synchronized: boolean;
+    version: number;
+    paths: Array<{
+      id: string;
+      tool: "cover" | "erase";
+      size: number;
+      points: Array<{ x: number; y: number }>;
+    }>;
+  };
 };
 
 export type RoteiroDaCampanha = {
@@ -256,6 +267,10 @@ export type EventoAuditoria = {
   entidade: string;
   criadoEm: string;
   detalhes: Record<string, unknown>;
+  sessaoId?: string;
+  antes: Record<string, unknown> | null;
+  depois: Record<string, unknown> | null;
+  statusReversao: "available" | "reversed" | "blocked";
 };
 
 export type RegrasDaCampanha = {
@@ -607,7 +622,7 @@ export async function getEventosAuditoria(campaignId: string): Promise<EventoAud
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("audit_events")
-    .select("id,event_type,entity_type,created_at,metadata")
+    .select("id,session_id,event_type,entity_type,created_at,metadata,before_data,after_data,reversal_status")
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -618,6 +633,10 @@ export async function getEventosAuditoria(campaignId: string): Promise<EventoAud
     entidade: event.entity_type,
     criadoEm: event.created_at,
     detalhes: (event.metadata ?? {}) as Record<string, unknown>,
+    sessaoId: event.session_id ?? undefined,
+    antes: (event.before_data ?? null) as Record<string, unknown> | null,
+    depois: (event.after_data ?? null) as Record<string, unknown> | null,
+    statusReversao: (event.reversal_status ?? "available") as EventoAuditoria["statusReversao"],
   }));
 }
 
@@ -987,6 +1006,7 @@ export async function getCenaPrincipal(
       visivel: true,
     })),
     connections: [],
+    reveal: { enabled: false, synchronized: false, version: 0, paths: [] },
   };
   if (!isSupabaseConfigured) return demonstracao;
   const supabase = await createClient();
@@ -1029,7 +1049,7 @@ export async function getCenaPrincipal(
   const visibleActorIds = rawTokens.flatMap((token) => (token.actor_id ? [token.actor_id] : []));
   const visibleItemIds = rawTokens.flatMap((token) => (token.item_id ? [token.item_id] : []));
   const privilegedReader = isAdminConfigured ? createAdminClient() : null;
-  const [actorDetails, itemDetails] = await Promise.all([
+  const [actorDetails, itemDetails, revealResult] = await Promise.all([
     privilegedReader && visibleActorIds.length > 0
       ? privilegedReader
           .from("actors")
@@ -1048,6 +1068,11 @@ export async function getCenaPrincipal(
           .in("id", visibleItemIds)
           .is("deleted_at", null)
       : Promise.resolve({ data: [], error: null }),
+    supabase
+      .from("scene_reveal_states")
+      .select("enabled,synchronized,version,paths")
+      .eq("scene_id", data.id)
+      .maybeSingle(),
   ]);
   if (actorDetails.error)
     throw new Error(`Falha ao carregar imagens dos atores visíveis: ${actorDetails.error.message}`);
@@ -1101,6 +1126,14 @@ export async function getCenaPrincipal(
     backgroundKey: media ? `${media.storage_bucket}/${media.storage_path}` : undefined,
     tokens,
     connections: [],
+    reveal: revealResult.data
+      ? {
+          enabled: revealResult.data.enabled,
+          synchronized: revealResult.data.synchronized,
+          version: revealResult.data.version,
+          paths: (revealResult.data.paths ?? []) as CenaDaCampanha["reveal"]["paths"],
+        }
+      : { enabled: false, synchronized: false, version: 0, paths: [] },
   };
 }
 

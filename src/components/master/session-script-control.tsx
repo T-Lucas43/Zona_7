@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleStop, Pause, Play, RadioTower, Route, Sparkles } from "lucide-react";
+import { CircleStop, FileDown, FileText, Pause, Play, RadioTower, RotateCcw, Route, Sparkles } from "lucide-react";
 import type { RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
 
@@ -44,7 +44,7 @@ export function SessionScriptControl({
   }, [scripts]);
 
   async function control(
-    action: "start" | "advance" | "pause" | "resume" | "improvise" | "complete",
+    action: "start" | "advance" | "rewind" | "pause" | "resume" | "improvise" | "complete",
     targetNodeKey?: string,
   ) {
     setPending(true);
@@ -122,6 +122,7 @@ export function SessionScriptControl({
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
+            <button className="btn" type="button" disabled={pending || run.sequence <= 1 || run.status === "completed"} onClick={() => void control("rewind")}><RotateCcw size={14} /> Retroceder roteiro</button>
             {run.status === "paused" || run.status === "improvising" ? (
               <button className="btn btn-primary" type="button" disabled={pending} onClick={() => void control("resume")}><Play size={14} /> Retomar</button>
             ) : (
@@ -129,6 +130,8 @@ export function SessionScriptControl({
             )}
             <button className="btn" type="button" disabled={pending || run.status === "completed"} onClick={() => void control("improvise")}><Sparkles size={14} /> Improvisar</button>
             <button className="btn" type="button" disabled={pending || run.status === "completed"} onClick={() => void control("complete")}><CircleStop size={14} /> Encerrar roteiro</button>
+            <a className="btn" href={`/api/master/scripts/${selectedScript}/pdf`} target="_blank"><FileText size={14} /> Visualizar no papel</a>
+            <a className="btn" href={`/api/master/scripts/${selectedScript}/pdf?download=1`}><FileDown size={14} /> Exportar PDF</a>
             {run.status === "completed" && <button className="btn btn-primary" type="button" onClick={() => { setRun(null); setSelectedScript(scripts[0]?.id ?? ""); setNotice("Selecione o roteiro publicado mais recente para a próxima execução."); }}><Play size={14} /> Iniciar nova execução</button>}
           </div>
         </div>

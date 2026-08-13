@@ -268,6 +268,14 @@ export type RuleCatalogEntry = {
   basePayload: Record<string, unknown>;
   effectivePayload: Record<string, unknown>;
   overridden: boolean;
+  history: Array<{
+    id: string;
+    action: string;
+    before: Record<string, unknown> | null;
+    after: Record<string, unknown> | null;
+    reason: string;
+    createdAt: string;
+  }>;
 };
 
 export async function getRuleCatalog(campaignId: string): Promise<RuleCatalogEntry[]> {
@@ -275,7 +283,7 @@ export async function getRuleCatalog(campaignId: string): Promise<RuleCatalogEnt
   const profile = await getCampaignProfile(campaignId);
   if (!profile) return [];
   const supabase = await createClient();
-  const [{ data, error }, overrides] = await Promise.all([
+  const [{ data, error }, overrides, history] = await Promise.all([
     supabase
       .from("rule_definitions")
       .select("id,key,category,title,player_summary,master_summary,current_version,rule_versions(version,payload)")
@@ -288,10 +296,22 @@ export async function getRuleCatalog(campaignId: string): Promise<RuleCatalogEnt
       .select("rule_definition_id,version,payload")
       .eq("campaign_id", campaignId)
       .eq("enabled", true),
+    supabase
+      .from("rule_change_log")
+      .select("id,rule_definition_id,action,before_data,after_data,reason,created_at")
+      .eq("campaign_id", campaignId)
+      .order("created_at", { ascending: false }),
   ]);
   if (error) throw new Error(`Falha ao carregar catálogo: ${error.message}`);
   if (overrides.error) throw new Error(`Falha ao carregar personalizações: ${overrides.error.message}`);
+  if (history.error) throw new Error(`Falha ao carregar histórico de regras: ${history.error.message}`);
   const overrideByRule = new Map((overrides.data ?? []).map((item) => [item.rule_definition_id, item]));
+  const historyByRule = new Map<string, RuleCatalogEntry["history"]>();
+  for (const item of history.data ?? []) {
+    const entries = historyByRule.get(item.rule_definition_id) ?? [];
+    entries.push({ id: item.id, action: item.action, before: item.before_data as Record<string, unknown> | null, after: item.after_data as Record<string, unknown> | null, reason: item.reason, createdAt: item.created_at });
+    historyByRule.set(item.rule_definition_id, entries);
+  }
   return (data as unknown as Array<{
     id: string; key: string; category: string; title: string; player_summary: string; master_summary: string;
     current_version: number; rule_versions: Array<{ version: number; payload: Record<string, unknown> }>;
@@ -309,6 +329,7 @@ export async function getRuleCatalog(campaignId: string): Promise<RuleCatalogEnt
       basePayload,
       effectivePayload: override?.payload ?? basePayload,
       overridden: Boolean(override),
+      history: historyByRule.get(rule.id) ?? [],
     };
   });
 }
