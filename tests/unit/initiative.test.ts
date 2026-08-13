@@ -18,4 +18,13 @@ describe("ordem de iniciativa", () => {
     ]);
     expect(ordered.map((item) => item.display_name)).toEqual(["Amber", "Magnus"]);
   });
+
+  it("desempata por bônus de iniciativa e depois Agilidade", () => {
+    const ordered = sortInitiativeCombatants([
+      { id: "a", display_name: "A", initiative: 18, initiative_bonus: 5, agility: 1, position: 0 },
+      { id: "b", display_name: "B", initiative: 18, initiative_bonus: 10, agility: 1, position: 1 },
+      { id: "c", display_name: "C", initiative: 18, initiative_bonus: 5, agility: 3, position: 2 },
+    ]);
+    expect(ordered.map((item) => item.id)).toEqual(["b", "c", "a"]);
+  });
 });

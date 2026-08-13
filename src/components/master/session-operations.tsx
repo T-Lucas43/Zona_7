@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   CheckCircle2,
+  Dices,
   Eye,
   EyeOff,
   Plus,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { AbilityUseRequest } from "@/server/repositories/character-repository";
+import type { CharacterSummary } from "@/types/domain";
 import type {
   AtorDaCampanha,
   CenaDaCampanha,
@@ -28,6 +30,7 @@ export function SessionOperations({
   initialEncounters,
   initialActors,
   initialRequests,
+  characters,
   compact = false,
 }: {
   campaignId: string;
@@ -36,6 +39,7 @@ export function SessionOperations({
   initialEncounters: EncontroDaCampanha[];
   initialActors: AtorDaCampanha[];
   initialRequests: AbilityUseRequest[];
+  characters: CharacterSummary[];
   compact?: boolean;
 }) {
   const [encounters, setEncounters] = useState(initialEncounters);
@@ -49,6 +53,16 @@ export function SessionOperations({
     "character",
   );
   const [combatantInitiative, setCombatantInitiative] = useState(0);
+  const [checkCharacterId, setCheckCharacterId] = useState(characters[0]?.id ?? "");
+  const [checkAttribute, setCheckAttribute] = useState<"agi" | "for" | "int" | "pre" | "vig">("agi");
+  const [checkSkill, setCheckSkill] = useState("");
+  const [checkDifficulty, setCheckDifficulty] = useState(15);
+  const [checkContext, setCheckContext] = useState("Teste solicitado durante a sessão");
+  const [checkConsequences, setCheckConsequences] = useState("");
+  const [checkFavorable, setCheckFavorable] = useState(0);
+  const [checkUnfavorable, setCheckUnfavorable] = useState(0);
+  const [checkModifier, setCheckModifier] = useState(0);
+  const [checkMethod, setCheckMethod] = useState<"roll" | "take_10" | "take_20">("roll");
   const [initiativeDrafts, setInitiativeDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
   async function createEncounter(event: React.FormEvent) {
@@ -262,6 +276,33 @@ export function SessionOperations({
       approved ? "Uso aprovado. O jogador já pode rolar." : "Uso recusado e jogador notificado.",
     );
   }
+  async function requestCheck(event: React.FormEvent) {
+    event.preventDefault();
+    if (!checkCharacterId) return setNotice("Selecione um personagem.");
+    const response = await fetch("/api/checks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "request",
+        campaignId,
+        sessionId,
+        characterId: checkCharacterId,
+        attribute: checkAttribute,
+        skill: checkSkill,
+        difficulty: checkDifficulty,
+        context: checkContext,
+        consequences: checkConsequences,
+        favorableDice: checkFavorable,
+        unfavorableDice: checkUnfavorable,
+        numericModifier: checkModifier,
+        method: checkMethod,
+      }),
+    });
+    const result = (await response.json()) as { requestId?: string; error?: string };
+    if (!response.ok) return setNotice(result.error ?? "Falha ao solicitar teste.");
+    const selectedCharacter = characters.find((item) => item.id === checkCharacterId);
+    setNotice(`Teste de ${checkSkill || checkAttribute.toUpperCase()} enviado para ${selectedCharacter?.name ?? "o jogador"}.`);
+  }
   return (
     <section
       className={
@@ -436,6 +477,35 @@ export function SessionOperations({
             </div>
           ))}
         </div>
+      </article>
+      <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-extrabold">Solicitar teste</h2>
+          <span className="tag">regra efetiva</span>
+        </div>
+        <form className="mt-3 space-y-2" onSubmit={requestCheck}>
+          <select className="field" aria-label="Personagem do teste" required value={checkCharacterId} onChange={(event) => setCheckCharacterId(event.target.value)}>
+            {characters.map((character) => <option value={character.id} key={character.id}>{character.name}</option>)}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <select className="field" aria-label="Atributo" value={checkAttribute} onChange={(event) => setCheckAttribute(event.target.value as typeof checkAttribute)}>
+              <option value="agi">AGI</option><option value="for">FOR</option><option value="int">INT</option><option value="pre">PRE</option><option value="vig">VIG</option>
+            </select>
+            <input className="field" aria-label="Perícia" placeholder="Perícia (opcional)" value={checkSkill} onChange={(event) => setCheckSkill(event.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="text-xs font-bold">DT<input className="field mt-1" type="number" min={0} max={99} value={checkDifficulty} onChange={(event) => setCheckDifficulty(Number(event.target.value))} /></label>
+            <label className="text-xs font-bold">Método<select className="field mt-1" value={checkMethod} onChange={(event) => setCheckMethod(event.target.value as typeof checkMethod)}><option value="roll">Rolar</option><option value="take_10">Escolher 10</option><option value="take_20">Escolher 20</option></select></label>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <label className="text-xs">Dados +<input className="field mt-1" type="number" min={0} max={20} value={checkFavorable} onChange={(event) => setCheckFavorable(Number(event.target.value))} /></label>
+            <label className="text-xs">Dados −<input className="field mt-1" type="number" min={0} max={20} value={checkUnfavorable} onChange={(event) => setCheckUnfavorable(Number(event.target.value))} /></label>
+            <label className="text-xs">Bônus<input className="field mt-1" type="number" min={-999} max={999} value={checkModifier} onChange={(event) => setCheckModifier(Number(event.target.value))} /></label>
+          </div>
+          <textarea className="field min-h-20" required aria-label="Contexto do teste" value={checkContext} onChange={(event) => setCheckContext(event.target.value)} />
+          <input className="field" aria-label="Consequência da falha" placeholder="Consequência da falha (opcional)" value={checkConsequences} onChange={(event) => setCheckConsequences(event.target.value)} />
+          <button className="btn btn-primary w-full" type="submit"><Dices size={14} /> Enviar solicitação</button>
+        </form>
       </article>
       <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
         <div className="flex items-center justify-between">

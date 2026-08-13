@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Archive,
+  BadgeHelp,
   BookOpen,
   Boxes,
   PackageSearch,
@@ -55,6 +56,7 @@ const getMasterLinks = (campaignId: string) =>
     [`/master/campaigns/${campaignId}/maps`, "Mapas e tokens", Map],
     [`/master/campaigns/${campaignId}/actors`, "Entidades e NPCs", Sparkles],
     [`/master/campaigns/${campaignId}/scripts`, "Roteiros", Waypoints],
+    [`/master/help?campaignId=${campaignId}`, "Regras e ajuda", BadgeHelp],
     [`/master/campaigns/${campaignId}/audit`, "Auditoria", ScrollText],
     [`/master/campaigns/${campaignId}/settings`, "Configurações", Settings],
   ] as const;
@@ -69,6 +71,7 @@ const getPlayerLinks = (characterId: string, visibleSections: string[], sessionI
       [`/app/characters/${characterId}/messages`, "Mensagens", Mail],
       [`/app/characters/${characterId}/handouts`, "Pistas", BookOpen],
       [`/app/characters/${characterId}/notebook`, "Livro de anotações", NotebookPen],
+      ["/app/help", "Ajuda e regras", BadgeHelp],
       ...(sessionId ? [[`/app/session/${sessionId}`, "Sala ao vivo", Dices] as const] : []),
     ] as const
   ).filter(([href]) => {

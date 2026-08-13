@@ -47,7 +47,7 @@ async function normalizeOrder(supabase: SupabaseClient, campaignId: string, enco
       .single(),
     supabase
       .from("encounter_combatants")
-      .select("id,display_name,kind,initiative,position")
+      .select("id,display_name,kind,initiative,position,initiative_bonus,agility")
       .eq("encounter_id", encounterId)
       .eq("campaign_id", campaignId),
   ]);

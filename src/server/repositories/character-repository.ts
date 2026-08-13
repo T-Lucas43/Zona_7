@@ -1176,10 +1176,53 @@ export async function getSessionAbilityRequests(sessionId: string): Promise<Abil
   }));
 }
 
+export type CharacterCheckRequest = {
+  id: string;
+  characterId: string;
+  characterName: string;
+  attribute: string;
+  skill: string | null;
+  difficulty: number;
+  context: string;
+  method: "roll" | "take_10" | "take_20";
+  createdAt: string;
+};
+
+export async function getSessionCheckRequests(sessionId: string): Promise<CharacterCheckRequest[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("roll_requests")
+    .select("id,character_id,attribute_key,skill_name,difficulty,context,method,created_at,characters(name)")
+    .eq("session_id", sessionId)
+    .is("character_ability_id", null)
+    .eq("status", "pending")
+    .is("rolled_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(`Falha ao carregar testes solicitados: ${error.message}`);
+  return (data as unknown as Array<{
+    id: string; character_id: string; attribute_key: string; skill_name: string | null;
+    difficulty: number; context: string; method: "roll" | "take_10" | "take_20";
+    created_at: string; characters: { name: string } | null;
+  }>).map((item) => ({
+    id: item.id,
+    characterId: item.character_id,
+    characterName: item.characters?.name ?? "Personagem",
+    attribute: item.attribute_key,
+    skill: item.skill_name,
+    difficulty: item.difficulty,
+    context: item.context,
+    method: item.method,
+    createdAt: item.created_at,
+  }));
+}
+
 export type PublicDiceRoll = {
   id: string;
   characterId: string | null;
   characterName: string;
+  playerName: string;
   purpose: string;
   formula: string;
   rolls: number[];
@@ -1192,7 +1235,7 @@ export async function getSessionDiceRolls(sessionId: string): Promise<PublicDice
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("dice_rolls")
-    .select("id,character_id,formula,rolls,total,purpose,created_at,characters(name)")
+    .select("id,character_id,roller_display_name,formula,rolls,total,purpose,created_at,characters(name),profiles(display_name)")
     .eq("session_id", sessionId)
     .eq("visibility", "session")
     .order("created_at", { ascending: false })
@@ -1202,17 +1245,20 @@ export async function getSessionDiceRolls(sessionId: string): Promise<PublicDice
     data as unknown as Array<{
       id: string;
       character_id: string | null;
+      roller_display_name: string | null;
       formula: string;
       rolls: number[];
       total: number;
       purpose: string;
       created_at: string;
       characters: { name: string } | null;
+      profiles: { display_name: string } | null;
     }>
   ).map((item) => ({
     id: item.id,
     characterId: item.character_id,
-    characterName: item.characters?.name ?? "Jogador",
+    characterName: item.characters?.name ?? item.roller_display_name ?? item.profiles?.display_name ?? "Jogador",
+    playerName: item.roller_display_name ?? item.profiles?.display_name ?? item.characters?.name ?? "Jogador",
     purpose: item.purpose,
     formula: item.formula,
     rolls: item.rolls,

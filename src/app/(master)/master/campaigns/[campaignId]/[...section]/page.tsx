@@ -23,6 +23,7 @@ import { MessagingStudio } from "@/components/master/messaging-studio";
 import { MeterControl } from "@/components/master/meter-control";
 import { NotebookManager } from "@/components/master/notebook-manager";
 import { ResourceConsole } from "@/components/master/resource-console";
+import { RuleCatalogManager } from "@/components/master/rule-catalog-manager";
 import { SessionHub } from "@/components/master/session-hub";
 import { SessionItemManager } from "@/components/master/session-item-manager";
 import { ScriptStudio } from "@/components/master/script-studio";
@@ -63,6 +64,7 @@ import {
 } from "@/server/repositories/session-repository";
 import { requireCampaignMaster } from "@/server/services/master-access";
 import { getSessionScriptRun } from "@/server/repositories/script-repository";
+import { getRuleCatalog } from "@/server/repositories/rules-repository";
 
 export default async function MasterSectionPage({
   params,
@@ -323,6 +325,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     conexoesMural,
     itens,
     regras,
+    catalogoRegras,
     auditoria,
     cadernos,
   ] = await Promise.all([
@@ -342,6 +345,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     area === "handouts" ? getConexoesDoMural(campaignId) : Promise.resolve([]),
     area === "items" || area === "maps" ? getItensDaCampanha(campaignId) : Promise.resolve([]),
     area === "rules" ? getRegras(campaignId) : Promise.resolve(null),
+    area === "rules" ? getRuleCatalog(campaignId) : Promise.resolve([]),
     area === "audit" ? getEventosAuditoria(campaignId) : Promise.resolve([]),
     area === "notebooks" ? getCadernosDaCampanha(campaignId) : Promise.resolve([]),
   ]);
@@ -420,6 +424,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
       {area === "items" && <SessionItemManager campaignId={campaignId} initialItems={itens} />}
       {area === "rules" &&
         (regras ? (
+          <>
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <section className="panel rounded-lg p-5">
               <Shield className="text-[#d84b57]" />
@@ -436,6 +441,8 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
               </p>
             </section>
           </div>
+          <div className="mt-5"><RuleCatalogManager campaignId={campaignId} initialRules={catalogoRegras} /></div>
+          </>
         ) : (
           <EmptyState text="Nenhum perfil de regras foi configurado." />
         ))}

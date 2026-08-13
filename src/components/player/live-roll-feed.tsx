@@ -17,7 +17,9 @@ export function LiveRollFeed({ rolls }: { rolls: PublicDiceRoll[] }) {
           >
             <div>
               <strong className="text-sm">
-                {roll.characterName} · {roll.purpose}
+                {roll.playerName}
+                {roll.characterName !== roll.playerName ? ` como ${roll.characterName}` : ""} ·{" "}
+                {roll.purpose}
               </strong>
               <p className="mt-1 font-mono text-[0.65rem] text-[#858891]">
                 {roll.formula} · [{roll.rolls.join(", ")}]

@@ -9,6 +9,11 @@ export async function rollDice(input: unknown, actorUserId: string) {
   if (!isSupabaseConfigured) return { ...result, id: crypto.randomUUID(), demo: true };
 
   const supabase = await createClient();
+  const { data: rollerProfile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", actorUserId)
+    .maybeSingle();
   if (request.characterId) {
     const { data: character } = await supabase.from("characters").select("character_state").eq("id", request.characterId).maybeSingle();
     if (["dying", "dead"].includes(character?.character_state ?? ""))
@@ -27,6 +32,7 @@ export async function rollDice(input: unknown, actorUserId: string) {
     .insert({
       campaign_id: campaignId,
       user_id: actorUserId,
+      roller_display_name: rollerProfile?.display_name ?? "Jogador",
       character_id: request.characterId ?? null,
       session_id: request.sessionId ?? null,
       roll_request_id: request.requestId ?? null,

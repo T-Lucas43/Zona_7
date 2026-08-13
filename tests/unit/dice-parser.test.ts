@@ -9,6 +9,8 @@ describe("parser seguro de dados", () => {
     ["2d8+4", "2d8+4"],
     ["1d4 SAN", "1d4 SAN"],
     ["2d6 mental", "2d6 mental"],
+    ["+1d20", "2d20kh1"],
+    ["-1d20", "2d20kl1"],
   ])("normaliza %s", (input, normalized) => {
     expect(parseDiceFormula(input).normalized).toBe(normalized);
   });

@@ -474,6 +474,7 @@ export function SessionHub({
                   initialEncounters={encounters}
                   initialActors={actors}
                   initialRequests={initialAbilityRequests}
+                  characters={characters}
                 />
                 <LiveRollFeed rolls={initialRolls} />
                 <form

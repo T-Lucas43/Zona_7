@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isSupabaseConfigured } from "@/lib/config";
 import { getCurrentUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { executeDiceRoll } from "@/lib/dice/parser";
-import { rollDice } from "@/server/services/dice-service";
 import { requireCampaignMaster } from "@/server/services/master-access";
 
 const schema = z.discriminatedUnion("action", [
@@ -66,24 +66,39 @@ export async function POST(request: Request) {
       p_actor_user_id: user.id,
     });
     if (claimError) throw new Error(claimError.message);
-    const value = claim as { campaignId: string; sessionId: string; characterId: string; formula: string; abilityName: string };
+    const value = claim as {
+      campaignId: string;
+      sessionId: string;
+      characterId: string;
+      characterAbilityId: string;
+      formula: string;
+      abilityName: string;
+      costs?: Record<string, string>;
+    };
     let formula = value.formula;
     try { executeDiceRoll(formula, () => 1); } catch { formula = "1d20"; }
-    const result = await rollDice({
-      formula,
-      characterId: value.characterId,
-      sessionId: value.sessionId,
-      requestId: input.requestId,
-      purpose: `Uso de ${value.abilityName}`,
-      visibility: "session",
-    }, user.id);
-    await supabase.rpc("notify_ability_roll", {
+    const resolvedCosts = Object.fromEntries(
+      Object.entries(value.costs ?? {}).map(([resource, cost]) => {
+        const expression = String(cost);
+        if (/^\d+$/.test(expression)) return [resource, Number(expression)];
+        return [resource, executeDiceRoll(expression).total];
+      }),
+    );
+    const result = executeDiceRoll(formula);
+    const { data: completed, error: completeError } = await createAdminClient().rpc("complete_ability_roll", {
       p_request_id: input.requestId,
-      p_roll_id: result.id,
-      p_total: result.total,
       p_actor_user_id: user.id,
+      p_formula: result.normalized,
+      p_rolls: result.rolls,
+      p_kept_indexes: result.keptIndexes,
+      p_modifier: result.modifier,
+      p_total: result.total,
+      p_resolved_costs: resolvedCosts,
+      p_idempotency_key: crypto.randomUUID(),
     });
-    return NextResponse.json(result, { status: 201 });
+    if (completeError) throw new Error(completeError.message);
+    const completedValue = completed as { id: string; duplicate?: boolean };
+    return NextResponse.json({ ...result, id: completedValue.id, demo: false, duplicate: completedValue.duplicate ?? false }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Solicitação inválida." },

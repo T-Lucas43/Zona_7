@@ -10,6 +10,8 @@ import { RealtimeIndicator } from "@/components/realtime-indicator";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
+import { SafetyTools } from "@/components/player/safety-tools";
+import { CheckRequestCard } from "@/components/player/check-request-card";
 import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
 import {
   getAuthorizedCharacters,
@@ -17,6 +19,7 @@ import {
   getCharacterAbilities,
   getCharacterInventory,
   getSessionAbilityRequests,
+  getSessionCheckRequests,
   getSessionDiceRolls,
 } from "@/server/repositories/character-repository";
 import { getCenaPrincipal, getSessionSceneState } from "@/server/repositories/master-repository";
@@ -59,6 +62,7 @@ export default async function PlayerSessionPage({
     inventory,
     requests,
     rolls,
+    checkRequests,
   ] = await Promise.all([
     getSessionPublicState(campaignId, session.id),
     getSessionCast(campaignId, session.id),
@@ -69,6 +73,7 @@ export default async function PlayerSessionPage({
     getCharacterInventory(character.id),
     getSessionAbilityRequests(session.id),
     getSessionDiceRolls(session.id),
+    getSessionCheckRequests(session.id),
   ]);
   const disabled = ["dying", "dead"].includes(character.characterState ?? "");
   const targets = cast.flatMap((member) =>
@@ -82,6 +87,7 @@ export default async function PlayerSessionPage({
   return (
     <div>
       <LiveSync campaignId={campaignId} />
+      <SafetyTools campaignId={campaignId} sessionId={session.id} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">sala ao vivo // rodada {session.round}</p>
@@ -279,6 +285,9 @@ export default async function PlayerSessionPage({
             sessionId={session.id}
             disabledReason={disabled ? "O personagem está sem ações neste estado." : undefined}
           />
+          {checkRequests.filter((request) => request.characterId === character.id).map((request) => (
+            <CheckRequestCard key={request.id} request={request} />
+          ))}
           <LiveRollFeed rolls={rolls} />
           {isCharacterSectionVisible(character, "abilities") && (
             <section className="panel rounded-lg p-5">

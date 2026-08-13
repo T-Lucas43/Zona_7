@@ -10,9 +10,11 @@ const labels: Record<ResourceKind, string> = { pv: "PV", pe: "PE", san: "SAN" };
 export function AbilityUseButton({
   abilityId,
   costs,
+  sessionId,
 }: {
   abilityId: string;
   costs: Partial<Record<ResourceKind, string>>;
+  sessionId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -39,6 +41,7 @@ export function AbilityUseButton({
       body: JSON.stringify({
         characterAbilityId: abilityId,
         resolvedCosts: resolved,
+        sessionId,
         idempotencyKey: crypto.randomUUID(),
       }),
     });

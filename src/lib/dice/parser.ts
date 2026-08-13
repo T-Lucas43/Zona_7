@@ -2,6 +2,7 @@ import { randomInt } from "node:crypto";
 
 const DICE_PATTERN =
   /^(\d{0,2})d(4|6|8|10|12|20|100)(?:(kh|kl)(\d{1,2}))?([+-]\d{1,4})?(?:\s+([\p{L}][\p{L}\s-]{0,39}))?$/iu;
+const ATTRIBUTE_DICE_PATTERN = /^([+-])(\d{0,2})d20$/i;
 
 export interface ParsedDiceFormula {
   count: number;
@@ -20,6 +21,20 @@ export interface DiceResult extends ParsedDiceFormula {
 
 export function parseDiceFormula(input: string): ParsedDiceFormula {
   const value = input.trim().replace(/\s*([+-])\s*/g, "$1");
+  const attributeDice = ATTRIBUTE_DICE_PATTERN.exec(value);
+  if (attributeDice) {
+    const adjustment = attributeDice[1] === "-" ? -1 : 1;
+    const magnitude = attributeDice[2] ? Number(attributeDice[2]) : 1;
+    if (magnitude < 1 || magnitude > 50) throw new Error("Use entre 1 e 50 dados.");
+    const count = magnitude + 1;
+    return {
+      count,
+      sides: 20,
+      keep: { mode: adjustment > 0 ? "highest" : "lowest", count: 1 },
+      modifier: 0,
+      normalized: `${count}d20${adjustment > 0 ? "kh1" : "kl1"}`,
+    };
+  }
   const match = DICE_PATTERN.exec(value);
   if (!match) throw new Error("Fórmula de dados inválida.");
 
