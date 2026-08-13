@@ -17,7 +17,9 @@ export default function MasterSectionError({
       <p className="mt-3 text-sm leading-6 text-[#8f9299]">
         Tente novamente. Se o problema continuar, informe o código abaixo ao administrador.
       </p>
-      {error.digest && <p className="mt-3 font-mono text-xs text-[#777a82]">Código {error.digest}</p>}
+      <p className="mt-3 font-mono text-xs text-[#777a82]">
+        Código {error.digest ?? "SEM-CODIGO"}
+      </p>
       <button className="btn btn-primary mx-auto mt-5" type="button" onClick={() => retry()}>
         <RotateCcw size={15} /> Tentar novamente
       </button>

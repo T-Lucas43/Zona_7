@@ -57,7 +57,7 @@ export function SessionInitiativeStrip({
                   />
                 ) : (
                   <span className="session-initiative-npc">
-                    {combatant.nome.slice(0, 2).toUpperCase()}
+                    {(combatant.nome ?? "NPC").slice(0, 2).toUpperCase()}
                   </span>
                 )}
                 {combatant.iniciativa !== null && (

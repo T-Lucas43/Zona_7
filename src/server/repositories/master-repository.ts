@@ -998,8 +998,9 @@ export async function getCenaPrincipal(
     .eq("campaign_id", campaignId)
     .is("deleted_at", null);
   query = sceneId ? query.eq("id", sceneId) : query.order("created_at").limit(1);
-  const { data, error } = await query.single();
+  const { data, error } = await query.maybeSingle();
   if (error) throw new Error(`Falha ao carregar cena: ${error.message}`);
+  if (!data) return demonstracao;
   const media = data.media_assets as unknown as {
     storage_bucket: string;
     storage_path: string;

@@ -99,7 +99,7 @@ export function TerminalShell({
   const router = useRouter();
   const sessionWorkspace = area === "master" && pathname.includes("/sessions");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(sessionWorkspace);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const campaignId = pathname.match(/\/master\/campaigns\/([^/]+)/)?.[1] ?? defaultCampaignId;
   const characterId =
     playerNavigation?.characterId ?? pathname.match(/\/app\/characters\/([^/]+)/)?.[1] ?? "davi";

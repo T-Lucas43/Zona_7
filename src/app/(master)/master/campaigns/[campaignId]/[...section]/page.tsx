@@ -67,6 +67,19 @@ import { requireCampaignMaster } from "@/server/services/master-access";
 import { getSessionScriptRun } from "@/server/repositories/script-repository";
 import { getRuleCatalog } from "@/server/repositories/rules-repository";
 
+async function optionalSessionModule<T>(
+  label: string,
+  operation: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error(`[Central da sessao] ${label} indisponivel`, error);
+    return fallback;
+  }
+}
+
 export default async function MasterSectionPage({
   params,
 }: {
@@ -105,7 +118,11 @@ async function SessionConsole({
       </div>
     );
   }
-  const sceneState = await getSessionSceneState(session.id);
+  const sceneState = await optionalSessionModule(
+    "sincronizacao da cena",
+    () => getSessionSceneState(session.id),
+    { enabled: true, sceneId: null },
+  );
   const [
     elenco,
     cena,
@@ -123,23 +140,71 @@ async function SessionConsole({
     testesSolicitados,
     rolagens,
   ] = await Promise.all([
-    getSessionCharacters(campaignId, session.id),
-    getCenaPrincipal(campaignId, sceneState.sceneId),
-    getContasDaCampanha(campaignId, false),
-    getRemetentes(campaignId),
-    getRoteiros(campaignId),
-    getSessionPublicState(campaignId, session.id),
-    getSessionCast(campaignId, session.id),
-    getSessionScriptRun(session.id),
-    getEncontros(campaignId),
-    getAtores(campaignId),
-    getItensDaCampanha(campaignId),
-    getPistas(campaignId),
-    getSessionAbilityRequests(session.id),
-    getSessionCheckRequests(session.id),
-    getSessionDiceRolls(session.id),
+    optionalSessionModule(
+      "personagens conectados",
+      () => getSessionCharacters(campaignId, session.id),
+      [],
+    ),
+    optionalSessionModule(
+      "mapa e tokens",
+      () => getCenaPrincipal(campaignId, sceneState.sceneId),
+      null,
+    ),
+    optionalSessionModule("contas vinculadas", () => getContasDaCampanha(campaignId, false), []),
+    optionalSessionModule("remetentes", () => getRemetentes(campaignId), []),
+    optionalSessionModule("roteiros", () => getRoteiros(campaignId), []),
+    optionalSessionModule(
+      "estado publico",
+      () => getSessionPublicState(campaignId, session.id),
+      {
+        sessionId: session.id,
+        campaignId,
+        sceneTitle: session.scene,
+        publicSummary: "",
+        publicObjective: "",
+        version: 0,
+      },
+    ),
+    optionalSessionModule("elenco visivel", () => getSessionCast(campaignId, session.id), []),
+    optionalSessionModule("execucao do roteiro", () => getSessionScriptRun(session.id), null),
+    optionalSessionModule("encontros", () => getEncontros(campaignId), []),
+    optionalSessionModule("entidades e NPCs", () => getAtores(campaignId), []),
+    optionalSessionModule("itens da sessao", () => getItensDaCampanha(campaignId), []),
+    optionalSessionModule("pistas", () => getPistas(campaignId), []),
+    optionalSessionModule(
+      "solicitacoes de habilidade",
+      () => getSessionAbilityRequests(session.id),
+      [],
+    ),
+    optionalSessionModule(
+      "testes solicitados",
+      () => getSessionCheckRequests(session.id),
+      [],
+    ),
+    optionalSessionModule("rolagens publicas", () => getSessionDiceRolls(session.id), []),
   ]);
-  const detalhes = await getSessionCharacterDetails(elenco.map((character) => character.id));
+  if (!cena) {
+    return (
+      <div>
+        <section className="panel rounded-lg p-6" role="alert">
+          <p className="eyebrow">central da sessao // mapa indisponivel</p>
+          <h1 className="mt-2 text-2xl font-black">A sessao continua acessivel</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#8f99a6]">
+            O mapa atual nao respondeu. Abra Mapas e tokens para selecionar ou publicar uma cena;
+            os demais dados da campanha foram preservados.
+          </p>
+          <a className="btn btn-primary mt-5" href={`/master/campaigns/${campaignId}/maps`}>
+            Abrir Mapas e tokens
+          </a>
+        </section>
+      </div>
+    );
+  }
+  const detalhes = await optionalSessionModule(
+    "fichas dos personagens conectados",
+    () => getSessionCharacterDetails(elenco.map((character) => character.id)),
+    [],
+  );
   return (
     <SessionHub
       key={JSON.stringify([

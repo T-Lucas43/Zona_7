@@ -438,7 +438,7 @@ export function MapStudio({
                     style={{ backgroundColor: token.cor, ...portraitStyle }}
                     data-portrait={portraitStyle ? "true" : "false"}
                   >
-                    {!portraitStyle && token.nome.slice(0, 2).toUpperCase()}
+                    {!portraitStyle && (token.nome ?? "TK").slice(0, 2).toUpperCase()}
                   </span>
                   {token.characterState === "dead" && (
                     <span

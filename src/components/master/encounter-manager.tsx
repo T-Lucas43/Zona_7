@@ -74,7 +74,7 @@ export function EncounterManager({ campaignId, initialItems }: { campaignId: str
       </form>
       <section className="grid content-start gap-3 md:grid-cols-2">
         {items.map((item) => <article className="panel central-card rounded-lg p-5" key={item.id}>
-          <div className="flex justify-between gap-3"><Swords className="text-[#d54a56]" /><span className="tag">{item.estado.toUpperCase()}</span></div>
+          <div className="flex justify-between gap-3"><Swords className="text-[#d54a56]" /><span className="tag">{(item.estado ?? "preparando").toUpperCase()}</span></div>
           <h2 className="mt-4 font-extrabold">{item.nome}</h2>
           <p className="mt-2 text-xs text-[#858890]">Rodada {item.rodada} · {item.participantes} participantes</p>
           {item.observacoes && <p className="mt-3 line-clamp-3 text-xs leading-5 text-[#a3a5ab]">{item.observacoes}</p>}

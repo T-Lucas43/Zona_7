@@ -74,7 +74,7 @@ export async function getCurrentSession(
     id: data.id,
     campaignId: data.campaign_id,
     title: data.title,
-    status: data.status as SessionSummary["status"],
+    status: (data.status ?? "preparing") as SessionSummary["status"],
     scene: sceneResult.data?.title ?? data.title,
     round: encounterResult.data?.round ?? 0,
     currentTurn: currentCombatant?.display_name ?? "Nenhum turno ativo",

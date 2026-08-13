@@ -397,7 +397,9 @@ export function SessionHub({
               <h1 className="text-2xl font-black">{session.title}</h1>
               <span className="tag">
                 <Radio size={12} />{" "}
-                {session.status === "active" ? "EM ANDAMENTO" : session.status.toUpperCase()}
+                {session.status === "active"
+                  ? "EM ANDAMENTO"
+                  : (session.status ?? "preparing").toUpperCase()}
               </span>
             </div>
           </div>
@@ -658,9 +660,9 @@ export function SessionHub({
                       <small>{selected.status}</small>
                     </span>
                     <div>
-                      {Object.values(selected.resources).map((item) => (
-                        <p key={item.kind}>
-                          <span>{item.kind.toUpperCase()}</span>
+                      {Object.entries(selected.resources).map(([resourceKey, item]) => (
+                        <p key={item.kind ?? resourceKey}>
+                          <span>{(item.kind ?? resourceKey).toUpperCase()}</span>
                           <i><b style={{ width: `${item.maximum > 0 ? Math.max(0, Math.min(100, (item.current / item.maximum) * 100)) : 0}%` }} /></i>
                           <strong>{item.current}/{item.maximum}</strong>
                         </p>
@@ -688,7 +690,9 @@ export function SessionHub({
                   {preparedCheck && (
                     <div className="session-prepared-check">
                       <span><BookOpen size={14} /> Teste preparado</span>
-                      <strong>{preparedCheck.skill ?? preparedCheck.attribute.toUpperCase()} · DT {preparedCheck.difficulty}</strong>
+                      <strong>
+                        {preparedCheck.skill ?? (preparedCheck.attribute ?? "teste").toUpperCase()} · DT {preparedCheck.difficulty}
+                      </strong>
                       <button type="button" onClick={() => focusControl("operacoes-sessao")}>Abrir</button>
                     </div>
                   )}
