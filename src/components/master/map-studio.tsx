@@ -5,6 +5,7 @@ import Image from "next/image";
 import {
   Gift,
   Brush,
+  Copy,
   Eraser,
   EyeOff,
   ImageUp,
@@ -13,13 +14,16 @@ import {
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  MousePointer2,
+  Square,
   Trash2,
   Undo2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 import { getCharacterPortraitStyle } from "@/components/character/character-portrait";
-import { MapRevealLayer } from "@/components/master/map-reveal-layer";
+import { MapRevealLayer, type RevealEditorMode } from "@/components/master/map-reveal-layer";
+import { resolveCachedMapImage, storeMapImage } from "@/lib/map-image-cache";
 import type { CenaDaCampanha, ItemDaCampanha } from "@/server/repositories/master-repository";
 
 function tokenPortraitStyle(token: CenaDaCampanha["tokens"][number]): React.CSSProperties | null {
@@ -75,7 +79,9 @@ export function MapStudio({
   const [selecionado, setSelecionado] = useState(initialScene.tokens[0]?.id ?? "");
   const [motivo, setMotivo] = useState("Movimento manual do mestre");
   const [aviso, setAviso] = useState("");
-  const [fundo, setFundo] = useState<string | null>(initialScene.backgroundUrl ?? null);
+  const [fundo, setFundo] = useState<string | null>(
+    initialScene.backgroundKey ? null : (initialScene.backgroundUrl ?? null),
+  );
   const [zoom, setZoom] = useState(100);
   const [toolsCollapsed, setToolsCollapsed] = useState(false);
   const [dragging, setDragging] = useState<{ id: string; dx: number; dy: number } | null>(null);
@@ -84,11 +90,13 @@ export function MapStudio({
   const [recipientId, setRecipientId] = useState(recipientCharacters[0]?.id ?? "");
   const [reveal, setReveal] = useState(initialScene.reveal);
   const [revealEditing, setRevealEditing] = useState(false);
-  const [revealTool, setRevealTool] = useState<"cover" | "erase">("cover");
+  const [revealTool, setRevealTool] = useState<RevealEditorMode>("cover");
+  const [selectedRevealId, setSelectedRevealId] = useState("");
   const [revealBrush, setRevealBrush] = useState(.05);
   const [revealDraftReady, setRevealDraftReady] = useState(false);
   const [revealServerReady, setRevealServerReady] = useState(false);
   const mapa = useRef<HTMLDivElement>(null);
+  const activeBackgroundKey = useRef(initialScene.backgroundKey ?? "");
   const revealAutosave = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealDraftKey = `zona7:map-reveal:${campaignId}:${sessionId ?? "preparacao"}:${initialScene.id}`;
   const availableTokens = useMemo(
@@ -113,13 +121,70 @@ export function MapStudio({
   const nextZIndex = () => Math.max(0, ...cena.tokens.map((token) => token.zIndex)) + 1;
 
   useEffect(() => {
+    let disposed = false;
+    const backgroundKey = initialScene.backgroundKey ?? "";
+    if (!backgroundKey) {
+      const frame = window.requestAnimationFrame(() => setFundo(initialScene.backgroundUrl ?? null));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (activeBackgroundKey.current !== backgroundKey) {
+      activeBackgroundKey.current = backgroundKey;
+      const frame = window.requestAnimationFrame(() => setFundo(null));
+      void resolveCachedMapImage(backgroundKey, initialScene.backgroundUrl).then((cachedUrl) => {
+        window.cancelAnimationFrame(frame);
+        if (!disposed && cachedUrl) setFundo(cachedUrl);
+      });
+      return () => {
+        disposed = true;
+        window.cancelAnimationFrame(frame);
+      };
+    }
+    void resolveCachedMapImage(backgroundKey, initialScene.backgroundUrl).then((cachedUrl) => {
+      if (!disposed && cachedUrl) setFundo(cachedUrl);
+    });
+    return () => { disposed = true; };
+  }, [initialScene.backgroundKey, initialScene.backgroundUrl]);
+
+  useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setCena(initialScene);
-      setFundo(initialScene.backgroundUrl ?? null);
       if (!revealEditing) setReveal(initialScene.reveal);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [initialScene, revealEditing]);
+
+  const updateRevealPath = useCallback((path: CenaDaCampanha["reveal"]["paths"][number]) => {
+    setReveal((current) => ({
+      ...current,
+      enabled: true,
+      synchronized: false,
+      paths: current.paths.map((item) => item.id === path.id ? path : item),
+    }));
+  }, []);
+
+  function duplicateSelectedReveal() {
+    const selected = reveal.paths.find((path) => path.id === selectedRevealId && path.shape === "rectangle");
+    if (!selected) return setAviso("Selecione um retângulo para duplicar.");
+    const xs = selected.points.map((point) => point.x);
+    const ys = selected.points.map((point) => point.y);
+    const dx = Math.max(-Math.min(...xs), Math.min(1 - Math.max(...xs), .025));
+    const dy = Math.max(-Math.min(...ys), Math.min(1 - Math.max(...ys), .025));
+    const copy = {
+      ...selected,
+      id: crypto.randomUUID(),
+      points: selected.points.map((point) => ({ x: point.x + dx, y: point.y + dy })),
+    };
+    setReveal((current) => ({ ...current, synchronized: false, paths: [...current.paths, copy] }));
+    setSelectedRevealId(copy.id);
+    setAviso("Retângulo duplicado. Arraste-o para a nova posição.");
+  }
+
+  function deleteSelectedReveal() {
+    if (!selectedRevealId) return setAviso("Selecione um retângulo para excluir.");
+    setReveal((current) => ({ ...current, synchronized: false, paths: current.paths.filter((path) => path.id !== selectedRevealId) }));
+    setSelectedRevealId("");
+    setAviso("Retângulo removido do rascunho.");
+  }
 
   useEffect(() => {
     let draft: { reveal?: typeof reveal; editing?: boolean } | null = null;
@@ -410,7 +475,8 @@ export function MapStudio({
   async function enviarMapa(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setFundo(URL.createObjectURL(file));
+    const previewUrl = URL.createObjectURL(file);
+    setFundo(previewUrl);
     const form = new FormData();
     form.set("campaignId", campaignId);
     form.set("sceneId", cena.id);
@@ -418,8 +484,12 @@ export function MapStudio({
     form.set("title", file.name);
     form.set("file", file);
     const response = await fetch("/api/master/media", { method: "POST", body: form });
-    const result = (await response.json()) as { signedUrl?: string; error?: string };
-    if (result.signedUrl) setFundo(result.signedUrl);
+    const result = (await response.json()) as { signedUrl?: string; backgroundKey?: string; error?: string };
+    if (response.ok && result.backgroundKey) {
+      const cached = await storeMapImage(result.backgroundKey, file);
+      setFundo(cached);
+      setCena((current) => ({ ...current, backgroundKey: result.backgroundKey, backgroundUrl: result.signedUrl }));
+    } else if (result.signedUrl) setFundo(result.signedUrl);
     setAviso(
       response.ok
         ? "Mapa enviado. Ajuste grade e posições antes de publicar."
@@ -592,7 +662,16 @@ export function MapStudio({
                 </button>
               );
             })}
-            <MapRevealLayer reveal={reveal} interactive={!collective && revealEditing} tool={revealTool} brushSize={revealBrush} onCommit={(path) => setReveal((value) => ({ ...value, enabled: true, synchronized: false, paths: [...value.paths, path] }))} />
+            <MapRevealLayer
+              reveal={reveal}
+              interactive={!collective && revealEditing}
+              mode={revealTool}
+              brushSize={revealBrush}
+              selectedId={selectedRevealId}
+              onSelect={(id) => setSelectedRevealId(id ?? "")}
+              onCommit={(path) => setReveal((value) => ({ ...value, enabled: true, synchronized: false, paths: [...value.paths, path] }))}
+              onUpdate={updateRevealPath}
+            />
           </div>
         </div>
         {collective && (
@@ -664,8 +743,14 @@ export function MapStudio({
                 <h3 className="mt-3 font-extrabold">Ocultação e revelação</h3>
                 <p className="mt-2 text-xs leading-5 text-[#858890]">Circule com a caneta para cobrir uma área de preto. Use a borracha para revelar aos poucos. A cena é dessincronizada antes da edição.</p>
                 {!revealEditing ? <button className="btn mt-3 w-full" type="button" disabled={!sessionId} onClick={() => void beginRevealEditing()}><EyeOff size={14} /> Dessincronizar e editar</button> : <>
-                  <div className="mt-3 grid grid-cols-2 gap-2"><button className={`btn ${revealTool === "cover" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("cover")}><Brush size={14} /> Caneta preta</button><button className={`btn ${revealTool === "erase" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("erase")}><Eraser size={14} /> Borracha</button></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button className={`btn ${revealTool === "cover" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("cover")}><Brush size={14} /> Caneta preta</button>
+                    <button className={`btn ${revealTool === "erase" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("erase")}><Eraser size={14} /> Borracha</button>
+                    <button className={`btn ${revealTool === "rectangle" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("rectangle")}><Square size={14} /> Criar retângulo</button>
+                    <button className={`btn ${revealTool === "select" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("select")}><MousePointer2 size={14} /> Selecionar e mover</button>
+                  </div>
                   <label className="mt-3 block text-xs font-bold">Tamanho da borracha/caneta<input className="mt-2 w-full accent-[#c92131]" type="range" min="1" max="20" value={Math.round(revealBrush * 100)} onChange={(event) => setRevealBrush(Number(event.target.value) / 100)} /></label>
+                  {revealTool === "select" && <div className="mt-3 grid grid-cols-2 gap-2"><button className="btn" type="button" disabled={!selectedRevealId} onClick={duplicateSelectedReveal}><Copy size={14} /> Duplicar</button><button className="btn" type="button" disabled={!selectedRevealId} onClick={deleteSelectedReveal}><Trash2 size={14} /> Excluir</button></div>}
                   <div className="mt-3 flex gap-2"><button className="btn flex-1" type="button" disabled={!reveal.paths.length} onClick={() => setReveal((value) => ({ ...value, paths: value.paths.slice(0, -1) }))}><Undo2 size={14} /> Desfazer traço</button><button className="btn flex-1" type="button" onClick={() => setReveal((value) => ({ ...value, paths: [] }))}><Trash2 size={14} /> Limpar</button></div>
                   <button className="btn mt-2 w-full" type="button" onClick={() => void saveReveal(reveal, false)}>Salvar rascunho oculto</button>
                   <button className="btn btn-primary mt-2 w-full" type="button" onClick={() => void saveReveal({ ...reveal, enabled: true }, true)}>Sincronizar revelação</button>

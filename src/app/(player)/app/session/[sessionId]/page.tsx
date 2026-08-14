@@ -115,20 +115,6 @@ export default async function PlayerSessionPage({
       <div className="mt-6">
         {sceneState.enabled ? (
           <MapStudio
-            key={JSON.stringify([
-              scene.backgroundKey,
-              scene.tokens.map((token) => [
-                token.id,
-                token.x,
-                token.y,
-                token.visivel,
-                token.characterState,
-                token.portraitKey,
-                token.itemImageKey,
-              ]),
-              scene.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
-              cast.map((member) => member.characterId),
-            ])}
             campaignId={campaignId}
             initialScene={scene}
             allowedCharacterIds={cast.flatMap((member) =>

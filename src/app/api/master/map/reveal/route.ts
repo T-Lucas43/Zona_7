@@ -7,6 +7,7 @@ const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1
 const path = z.object({
   id: z.string().min(1).max(100),
   tool: z.enum(["cover", "erase"]),
+  shape: z.enum(["freehand", "rectangle"]).optional(),
   size: z.number().min(0.005).max(0.5),
   points: z.array(point).min(1).max(2_000),
 });

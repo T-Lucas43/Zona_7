@@ -40,6 +40,7 @@ export async function POST(request: Request) {
           mimeType: file.type,
           size: file.size,
           signedUrl: null,
+          backgroundKey: assetType === "map" ? `demo/${crypto.randomUUID()}` : undefined,
           demo: true,
         },
         { status: 201 },
@@ -194,7 +195,12 @@ export async function POST(request: Request) {
     });
     const { data: signed } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
     return NextResponse.json(
-      { ...data, signedUrl: signed?.signedUrl ?? null, imagePath: itemImage ? path : undefined },
+      {
+        ...data,
+        signedUrl: signed?.signedUrl ?? null,
+        backgroundKey: assetType === "map" ? `${bucket}/${path}` : undefined,
+        imagePath: itemImage ? path : undefined,
+      },
       { status: 201 },
     );
   } catch (error) {

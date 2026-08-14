@@ -141,6 +141,7 @@ export type CenaDaCampanha = {
     paths: Array<{
       id: string;
       tool: "cover" | "erase";
+      shape?: "freehand" | "rectangle";
       size: number;
       points: Array<{ x: number; y: number }>;
     }>;
