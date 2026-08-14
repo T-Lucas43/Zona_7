@@ -196,7 +196,7 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
   const reader = isAdminConfigured ? createAdminClient() : supabase;
   const { data: encounter, error: encounterError } = await reader
     .from("encounters")
-    .select("id,current_turn_position")
+    .select("id,current_turn_position,initiative_state")
     .eq("session_id", sessionId)
     .in("status", ["active", "paused"])
     .order("created_at", { ascending: false })
@@ -204,6 +204,7 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
     .maybeSingle();
   if (encounterError) throw new Error(`Falha ao carregar iniciativa: ${encounterError.message}`);
   if (!encounter) return [];
+  if (encounter.initiative_state === "idle") return [];
   const { data, error } = await reader
     .from("encounter_combatants")
     .select("id,display_name,initiative,position,kind,current_hp,maximum_hp,hidden_hp,visible_state")

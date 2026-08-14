@@ -151,6 +151,10 @@ export function SessionHub({
   const [combatantVisibleState, setCombatantVisibleState] = useState("Ativo");
   const [combatantHiddenHp, setCombatantHiddenHp] = useState(true);
   const [combatantReason, setCombatantReason] = useState("Ajuste durante o combate");
+  const [npcAttackId, setNpcAttackId] = useState("");
+  const [npcTargetIds, setNpcTargetIds] = useState<string[]>([]);
+  const [npcAttackReview, setNpcAttackReview] = useState(false);
+  const [npcAttackBusy, setNpcAttackBusy] = useState(false);
   const [sceneSelection, setSceneSelection] = useState<CenaDaCampanha["tokens"][number] | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const draftKey = `zona7:session-hub:${campaignId}:${session.id}`;
@@ -190,6 +194,10 @@ export function SessionHub({
   const selectedOpponent = selectedCombatant && !selectedCombatantCharacter
     ? selectedCombatant
     : undefined;
+  const selectedOpponentActor = selectedOpponent?.actorId
+    ? actors.find((actor) => actor.id === selectedOpponent.actorId)
+    : undefined;
+  const selectedNpcAttack = selectedOpponentActor?.ataques?.find((attack) => attack.id === npcAttackId);
   useEffect(() => {
     const draft = readSessionDraft<{
       selectedId: string;
@@ -369,6 +377,31 @@ export function SessionHub({
       return setNotice(result.error ?? "Falha ao definir o turno atual.");
     commitCombatants(activeEncounter.id, result.combatentes);
     setNotice(`Turno de ${selectedOpponent.nome} definido e sincronizado.`);
+  }
+
+  async function executeNpcAttack() {
+    if (!activeEncounter || !selectedOpponentActor || !selectedNpcAttack) return;
+    setNpcAttackBusy(true);
+    const response = await fetch("/api/master/actors/combat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "execute_attack",
+        campaignId,
+        actorId: selectedOpponentActor.id,
+        attackId: selectedNpcAttack.id,
+        sessionId: session.id,
+        encounterId: activeEncounter.id,
+        targetCharacterIds: npcTargetIds,
+        targetActorIds: [],
+      }),
+    });
+    const result = (await response.json()) as { outcomes?: Array<{ targetName: string; hit: boolean; damage: number }>; error?: string };
+    setNpcAttackBusy(false);
+    if (!response.ok) return setNotice(result.error ?? "Falha ao executar o ataque.");
+    setNpcAttackReview(false);
+    setNpcTargetIds([]);
+    setNotice(`${selectedOpponentActor.nome}: ${result.outcomes?.map((outcome) => `${outcome.targetName} — ${outcome.hit ? `${outcome.damage} de dano` : "falha"}`).join("; ")}. Resultado publicado em tempo real.`);
   }
 
   async function toggleVisibility() {
@@ -752,6 +785,7 @@ export function SessionHub({
           <SessionInitiativeStrip
             encounter={activeEncounter}
             characters={characters}
+            actors={actors}
             selectedCombatantId={selectedCombatantId}
             onSelectCombatant={(combatant) => {
               setSelectedCombatantId(combatant.id);
@@ -959,6 +993,37 @@ export function SessionHub({
                       Definir turno
                     </button>
                   </div>
+                  {selectedOpponentActor && (selectedOpponentActor.ataques?.length ?? 0) > 0 && (
+                    <div className="mt-4 border-t border-[#343840] pt-3">
+                      <p className="eyebrow">ataque do npc // confirmação obrigatória</p>
+                      <select className="field mt-2" value={npcAttackId} onChange={(event) => { setNpcAttackId(event.target.value); setNpcTargetIds([]); setNpcAttackReview(false); }}>
+                        <option value="">Escolha um ataque</option>
+                        {selectedOpponentActor.ataques!.map((attack) => <option value={attack.id} key={attack.id}>{attack.nome} · {attack.formulaAtaque} / {attack.formulaDano}</option>)}
+                      </select>
+                      {selectedNpcAttack && (
+                        <fieldset className="mt-2 rounded border border-[#343840] p-2">
+                          <legend className="px-1 text-[0.65rem] font-bold uppercase">Alvos ({selectedNpcAttack.alvosMinimos}-{selectedNpcAttack.alvosMaximos})</legend>
+                          {characters.map((character) => (
+                            <label className="mt-1 flex items-center gap-2 text-xs" key={character.id}>
+                              <input type="checkbox" checked={npcTargetIds.includes(character.id)} onChange={(event) => setNpcTargetIds((current) => event.target.checked ? current.length < selectedNpcAttack.alvosMaximos ? [...current, character.id] : current : current.filter((id) => id !== character.id))} />
+                              {character.name} · DEF {character.defense} · PV {character.resources.pv.current}/{character.resources.pv.maximum}
+                            </label>
+                          ))}
+                        </fieldset>
+                      )}
+                      {!npcAttackReview ? (
+                        <button className="btn btn-primary mt-2 w-full" type="button" disabled={!selectedNpcAttack || npcTargetIds.length < (selectedNpcAttack?.alvosMinimos ?? 1)} onClick={() => setNpcAttackReview(true)}>
+                          Preparar e revisar ataque
+                        </button>
+                      ) : (
+                        <div className="mt-2 rounded border border-[#6d5527] bg-[#6d5527]/10 p-3">
+                          <strong className="text-sm">Confirmar {selectedNpcAttack?.nome}?</strong>
+                          <p className="mt-1 text-xs text-[#c7b487]">O servidor rolará o ataque, verificará a Defesa, aplicará o dano e publicará tudo em nome de {selectedOpponentActor.nome}.</p>
+                          <div className="mt-2 grid grid-cols-2 gap-2"><button className="btn" type="button" onClick={() => setNpcAttackReview(false)}>Recusar / cancelar</button><button className="btn btn-primary" type="button" disabled={npcAttackBusy} onClick={() => void executeNpcAttack()}>{npcAttackBusy ? "Rolando..." : "Permitir e executar"}</button></div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </section>
               )}
 

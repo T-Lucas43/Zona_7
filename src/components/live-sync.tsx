@@ -22,6 +22,8 @@ const liveTables = [
   "media_assets",
   "game_scenes",
   "actors",
+  "actor_combat_profiles",
+  "actor_attacks",
   "scene_tokens",
   "sessions",
   "session_participants",

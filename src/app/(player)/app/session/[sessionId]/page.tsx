@@ -12,12 +12,14 @@ import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { SafetyTools } from "@/components/player/safety-tools";
 import { CheckRequestCard } from "@/components/player/check-request-card";
 import { PlayerInitiativeStrip } from "@/components/player/player-initiative-strip";
+import { AttackRequestButton } from "@/components/player/attack-request-button";
 import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
 import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import {
   getAuthorizedCharacters,
   getAuthorizedMessages,
   getCharacterAbilities,
+  getCharacterActions,
   getCharacterInventory,
   getSessionAbilityRequests,
   getSessionCheckRequests,
@@ -64,6 +66,7 @@ export default async function PlayerSessionPage({
     requests,
     rolls,
     checkRequests,
+    actions,
   ] = await Promise.all([
     getSessionPublicState(campaignId, session.id),
     getSessionCast(campaignId, session.id),
@@ -75,6 +78,7 @@ export default async function PlayerSessionPage({
     getSessionAbilityRequests(session.id),
     getSessionDiceRolls(session.id),
     getSessionCheckRequests(session.id),
+    getCharacterActions(character.id),
   ]);
   const disabled = ["dying", "dead"].includes(character.characterState ?? "");
   const targets = cast.flatMap((member) =>
@@ -85,6 +89,10 @@ export default async function PlayerSessionPage({
   const visibleEntities = scene.tokens.filter(
     (token) => token.actorType && token.actorType !== "player_character" && token.visivel,
   );
+  const combatTargets = [
+    ...targets.map((target) => ({ ...target, type: "character" as const })),
+    ...visibleEntities.flatMap((token) => token.atorId ? [{ id: token.atorId, name: token.nome, type: "actor" as const }] : []),
+  ];
   const playerCheckRequests = checkRequests.filter(
     (request) => request.characterId === character.id,
   );
@@ -278,6 +286,35 @@ export default async function PlayerSessionPage({
             <CheckRequestCard key={request.id} request={request} />
           ))}
           <LiveRollFeed rolls={rolls} />
+          {isCharacterSectionVisible(character, "combat") && (
+            <section className="panel rounded-lg p-5">
+              <div className="flex items-center gap-2">
+                <Swords size={17} className="text-[#d94a57]" />
+                <h2 className="font-extrabold">Ataques</h2>
+              </div>
+              <p className="mt-2 text-xs text-[#8f949d]">Escolha o alvo. O mestre precisa aprovar antes da rolagem e do dano.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {actions.map((action) => (
+                  <article className="rounded border border-[#30333a] p-4" key={action.id}>
+                    <strong>{action.name}</strong>
+                    <p className="mt-1 font-mono text-xs text-[#9ca1aa]">{action.test} · dano {action.damage}</p>
+                    {action.description && <p className="mt-2 text-xs text-[#8f949d]">{action.description}</p>}
+                    {!disabled && <AttackRequestButton
+                      campaignId={campaignId}
+                      sessionId={session.id}
+                      characterId={character.id}
+                      attackId={action.id}
+                      targets={combatTargets}
+                      targetMin={action.targetMin}
+                      targetMax={action.targetMax}
+                      pendingRequest={requests.find((request) => request.requestKind === "attack" && request.characterAbilityId === action.id)}
+                    />}
+                  </article>
+                ))}
+                {actions.length === 0 && <p className="text-sm text-[#777a82]">Nenhum ataque disponível na ficha.</p>}
+              </div>
+            </section>
+          )}
           {isCharacterSectionVisible(character, "abilities") && (
             <section className="panel rounded-lg p-5">
               <div className="flex items-center gap-2">
@@ -289,6 +326,13 @@ export default async function PlayerSessionPage({
                   .filter((ability) => ability.state === "unlocked")
                   .map((ability) => {
                     const request = requests.find((item) => item.characterAbilityId === ability.id);
+                    const abilityTargets = ability.targetScope === "self"
+                      ? [{ id: character.id, name: character.name, type: "character" as const }]
+                      : ability.targetScope === "ally"
+                        ? [{ id: character.id, name: character.name, type: "character" as const }, ...targets.map((target) => ({ ...target, type: "character" as const }))]
+                        : ability.targetScope === "enemy"
+                          ? combatTargets.filter((target) => target.type === "actor")
+                          : [{ id: character.id, name: character.name, type: "character" as const }, ...combatTargets];
                     return (
                       <article className="rounded border border-[#30333a] p-4" key={ability.id}>
                         <strong>{ability.name}</strong>
@@ -302,6 +346,9 @@ export default async function PlayerSessionPage({
                             sessionId={session.id}
                             characterId={character.id}
                             abilityId={ability.id}
+                            targets={abilityTargets}
+                            targetMin={ability.targetMin}
+                            targetMax={ability.targetMax}
                             pendingRequest={
                               request
                                 ? {

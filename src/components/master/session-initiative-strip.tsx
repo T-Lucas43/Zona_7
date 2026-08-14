@@ -3,7 +3,7 @@
 import { Crown, Swords } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { CharacterSummary } from "@/types/domain";
-import type { EncontroDaCampanha } from "@/server/repositories/master-repository";
+import type { AtorDaCampanha, EncontroDaCampanha } from "@/server/repositories/master-repository";
 
 function matchesCharacter(name: string, character: CharacterSummary) {
   const normalize = (value: string) =>
@@ -19,18 +19,20 @@ export function SessionInitiativeStrip({
   onSelectCharacter,
   onSelectCombatant,
   selectedCombatantId,
+  actors = [],
 }: {
   encounter: EncontroDaCampanha | null;
   characters: CharacterSummary[];
   onSelectCharacter: (characterId: string) => void;
   onSelectCombatant: (combatant: EncontroDaCampanha["combatentes"][number]) => void;
   selectedCombatantId?: string;
+  actors?: AtorDaCampanha[];
 }) {
-  if (!encounter || encounter.estado === "ended") {
+  if (!encounter || encounter.estado === "ended" || encounter.iniciativaEstado === "idle") {
     return (
       <section className="session-initiative-strip is-empty" aria-label="Ordem de iniciativa">
         <Swords size={16} />
-        <span>Iniciativa aguardando encontro ativo.</span>
+        <span>O mestre ainda não solicitou a iniciativa.</span>
       </section>
     );
   }
@@ -46,6 +48,7 @@ export function SessionInitiativeStrip({
           const character = characters.find(
             (item) => item.id === combatant.characterId || matchesCharacter(combatant.nome, item),
           );
+          const actor = actors.find((item) => item.id === combatant.actorId);
           const currentHp = character?.resources.pv.current ?? combatant.pvAtual;
           const maximumHp = character?.resources.pv.maximum ?? combatant.pvMaximo;
           const hpPercent =
@@ -68,10 +71,10 @@ export function SessionInitiativeStrip({
                   if (character) onSelectCharacter(character.id);
                 }}
               >
-                {character ? (
+                {character || actor?.portraitUrl ? (
                   <CharacterPortrait
-                    name={character.name}
-                    portraitUrl={character.portraitUrl}
+                    name={character?.name ?? actor?.nome ?? combatant.nome}
+                    portraitUrl={character?.portraitUrl ?? actor?.portraitUrl}
                     className="size-10 rounded-full"
                   />
                 ) : (

@@ -72,6 +72,9 @@ export interface AbilitySummary {
   successEffect?: string;
   partialEffect?: string;
   failureEffect?: string;
+  targetScope?: "self" | "ally" | "enemy" | "any";
+  targetMin?: number;
+  targetMax?: number;
 }
 
 export interface SessionSummary {

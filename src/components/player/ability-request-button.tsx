@@ -10,17 +10,24 @@ export function AbilityRequestButton({
   characterId,
   abilityId,
   pendingRequest,
+  targets = [],
+  targetMin = 0,
+  targetMax = 1,
 }: {
   campaignId: string;
   sessionId: string;
   characterId: string;
   abilityId: string;
   pendingRequest?: { id: string; decision: string | null; rolled: boolean };
+  targets?: Array<{ id: string; name: string; type: "character" | "actor" }>;
+  targetMin?: number;
+  targetMax?: number;
 }) {
   const [request, setRequest] = useState(pendingRequest);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<number>();
+  const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   async function act(action: "request" | "roll") {
     setBusy(true);
     setNotice("");
@@ -36,6 +43,8 @@ export function AbilityRequestButton({
               characterId,
               characterAbilityId: abilityId,
               context: "Solicitação enviada pela sala ao vivo",
+              targetCharacterIds: targets.filter((target) => target.type === "character" && selectedTargets.includes(target.id)).map((target) => target.id),
+              targetActorIds: targets.filter((target) => target.type === "actor" && selectedTargets.includes(target.id)).map((target) => target.id),
             }
           : { action, requestId: request?.id },
       ),
@@ -99,10 +108,31 @@ export function AbilityRequestButton({
     );
   return (
     <div>
+      {targets.length > 0 && targetMax > 0 && (
+        <fieldset className="mt-3 rounded border border-[#343840] p-2">
+          <legend className="px-1 text-[0.65rem] font-bold uppercase tracking-wide text-[#9da2ab]">
+            Alvos ({targetMin}-{targetMax})
+          </legend>
+          <div className="space-y-1">
+            {targets.map((target) => (
+              <label className="flex cursor-pointer items-center gap-2 text-xs" key={`${target.type}:${target.id}`}>
+                <input
+                  type="checkbox"
+                  checked={selectedTargets.includes(target.id)}
+                  onChange={(event) => setSelectedTargets((current) => event.target.checked
+                    ? current.length < targetMax ? [...current, target.id] : current
+                    : current.filter((id) => id !== target.id))}
+                />
+                <span>{target.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <button
         className="btn btn-primary mt-3 w-full"
         type="button"
-        disabled={busy}
+        disabled={busy || selectedTargets.length < targetMin || selectedTargets.length > targetMax}
         onClick={() => void act("request")}
       >
         <Send size={14} /> {busy ? "Enviando..." : "Solicitar uso ao mestre"}

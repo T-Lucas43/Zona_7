@@ -95,6 +95,40 @@ export type AtorDaCampanha = {
   naCena: boolean;
   tokenId?: string;
   tokenVisivel?: boolean;
+  ficha?: {
+    classificacao: string;
+    nivelAmeaca: number;
+    defesa: number;
+    deslocamento: number;
+    bonusIniciativa: number;
+    atributos: { agi: number; for: number; int: number; pre: number; vig: number };
+    recursos: {
+      pv: { atual: number; maximo: number };
+      pe: { atual: number; maximo: number };
+      san: { atual: number; maximo: number };
+    };
+    resistencias: Record<string, number>;
+    pericias: Record<string, number>;
+    condicoes: string[];
+    observacoes: string;
+  };
+  ataques?: Array<{
+    id: string;
+    nome: string;
+    formulaAtaque: string;
+    formulaDano: string;
+    tipoDano: string;
+    alcance: string;
+    tipoAcao: string;
+    descricao: string;
+    requisitos: string;
+    efeitosAdicionais: string;
+    recurso: "pv" | "pe" | "san" | null;
+    custo: number;
+    escopoAlvo: "self" | "ally" | "enemy" | "any";
+    alvosMinimos: number;
+    alvosMaximos: number;
+  }>;
 };
 
 export type ItemDaCampanha = {
@@ -217,6 +251,7 @@ export type EncontroDaCampanha = {
   combatentes: Array<{
     id: string;
     characterId: string | null;
+    actorId: string | null;
     nome: string;
     tipo: "character" | "ally" | "npc" | "enemy";
     iniciativa: number | null;
@@ -227,6 +262,7 @@ export type EncontroDaCampanha = {
     pvOculto: boolean;
     estadoVisivel: string;
   }>;
+  iniciativaEstado: "idle" | "requested" | "active" | "ended";
 };
 
 export type MensagemDaCampanha = {
@@ -419,6 +455,7 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
         participantes: 7,
         observacoes: "Ordem de demonstração da central da sessão.",
         turnoAtual: 1,
+        iniciativaEstado: "active",
         combatentes: [
           ["Davi Brito", "character", 19],
           ["Magnus Sigvaldi", "character", 18],
@@ -430,6 +467,7 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
         ].map(([nome, tipo, iniciativa], posicao) => ({
           id: `demo-combatente-${posicao}`,
           characterId: tipo === "character" ? `demo-character-${posicao}` : null,
+          actorId: tipo === "character" ? null : `demo-actor-${posicao}`,
           nome: String(nome),
           tipo: tipo as "character" | "enemy",
           iniciativa: Number(iniciativa),
@@ -446,7 +484,7 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
   const { data, error } = await supabase
     .from("encounters")
     .select(
-      "id,name,status,round,current_turn_position,gm_notes,encounter_combatants(id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state)",
+      "id,name,status,round,current_turn_position,gm_notes,initiative_state,encounter_combatants(id,character_id,actor_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state)",
     )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
@@ -463,9 +501,11 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
       participantes: combatentes.length,
       observacoes: encounter.gm_notes ?? "",
       turnoAtual: encounter.current_turn_position,
+      iniciativaEstado: (encounter.initiative_state ?? "idle") as EncontroDaCampanha["iniciativaEstado"],
       combatentes: combatentes.map((combatente) => ({
         id: combatente.id,
         characterId: combatente.character_id,
+        actorId: combatente.actor_id,
         nome: combatente.display_name,
         tipo: combatente.kind,
         iniciativa: combatente.initiative,
@@ -968,7 +1008,7 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
   const { data, error } = await supabase
     .from("actors")
     .select(
-      "id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id)",
+      "id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id),actor_combat_profiles(classification,threat_level,defense,movement,initiative_bonus,agility,strength,intellect,presence,vigor,current_hp,maximum_hp,current_pe,maximum_pe,current_san,maximum_san,resistances,skills,conditions,notes),actor_attacks(id,name,attack_formula,damage_formula,damage_type,range_text,action_type,description,requirements,additional_effects,resource_kind,resource_cost,target_scope,target_min,target_max,is_active,sort_order)",
     )
     .eq("campaign_id", campaignId)
     .neq("actor_type", "player_character")
@@ -982,6 +1022,9 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
             .from("actor-portraits")
             .createSignedUrl(ator.public_portrait_path, 3600)
         : null;
+      const profile = Array.isArray(ator.actor_combat_profiles)
+        ? ator.actor_combat_profiles[0]
+        : ator.actor_combat_profiles;
       return {
         id: ator.id,
         nome: ator.name,
@@ -994,6 +1037,51 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
         naCena: ator.scene_tokens.length > 0,
         tokenId: ator.scene_tokens[0]?.id,
         tokenVisivel: ator.scene_tokens[0]?.visible,
+        ficha: profile
+          ? {
+              classificacao: profile.classification,
+              nivelAmeaca: profile.threat_level,
+              defesa: profile.defense,
+              deslocamento: profile.movement,
+              bonusIniciativa: profile.initiative_bonus,
+              atributos: {
+                agi: profile.agility,
+                for: profile.strength,
+                int: profile.intellect,
+                pre: profile.presence,
+                vig: profile.vigor,
+              },
+              recursos: {
+                pv: { atual: profile.current_hp, maximo: profile.maximum_hp },
+                pe: { atual: profile.current_pe, maximo: profile.maximum_pe },
+                san: { atual: profile.current_san, maximo: profile.maximum_san },
+              },
+              resistencias: (profile.resistances ?? {}) as Record<string, number>,
+              pericias: (profile.skills ?? {}) as Record<string, number>,
+              condicoes: profile.conditions ?? [],
+              observacoes: profile.notes ?? "",
+            }
+          : undefined,
+        ataques: [...(ator.actor_attacks ?? [])]
+          .filter((attack) => attack.is_active)
+          .sort((left, right) => left.sort_order - right.sort_order)
+          .map((attack) => ({
+            id: attack.id,
+            nome: attack.name,
+            formulaAtaque: attack.attack_formula,
+            formulaDano: attack.damage_formula,
+            tipoDano: attack.damage_type ?? "",
+            alcance: attack.range_text ?? "",
+            tipoAcao: attack.action_type,
+            descricao: attack.description ?? "",
+            requisitos: attack.requirements ?? "",
+            efeitosAdicionais: attack.additional_effects ?? "",
+            recurso: attack.resource_kind as "pv" | "pe" | "san" | null,
+            custo: attack.resource_cost,
+            escopoAlvo: attack.target_scope as "self" | "ally" | "enemy" | "any",
+            alvosMinimos: attack.target_min,
+            alvosMaximos: attack.target_max,
+          })),
       };
     }),
   );

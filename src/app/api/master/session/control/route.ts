@@ -3,6 +3,7 @@ import { sessionControlSchema } from "@/lib/validation/schemas";
 import { advanceSessionTurnSynced, controlSessionRuntime } from "@/server/services/domain-service";
 import { requireCampaignMaster } from "@/server/services/master-access";
 import { generateAutomaticSessionSummary } from "@/server/services/session-summary-service";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,10 @@ export async function POST(request: Request) {
     });
     let result;
     if (input.action === "advance") {
+      const supabase = await createClient();
+      const { data: encounter, error } = await supabase.from("encounters").select("initiative_state").eq("campaign_id", input.campaignId).eq("session_id", input.sessionId).in("status", ["active", "paused"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!encounter || encounter.initiative_state !== "active") throw new Error("Solicite e conclua a iniciativa antes de avançar o turno.");
       result = await advanceSessionTurnSynced({
         campaignId: input.campaignId,
         sessionId: input.sessionId,

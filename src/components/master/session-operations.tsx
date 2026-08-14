@@ -256,6 +256,48 @@ export function SessionOperations({
             : "Iniciativa salva e ordem recalculada.",
     );
   }
+  async function requestInitiative(encounter: EncontroDaCampanha) {
+    const response = await fetch("/api/master/initiative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "request",
+        campaignId,
+        encounterId: encounter.id,
+        sessionId,
+        sceneId: scene.id,
+      }),
+    });
+    const result = (await response.json()) as { combatentes?: EncontroDaCampanha["combatentes"]; error?: string };
+    if (!response.ok || !result.combatentes) return setNotice(result.error ?? "Não foi possível solicitar a iniciativa.");
+    commitEncounters((items) => items.map((item) => item.id === encounter.id ? {
+      ...item,
+      iniciativaEstado: "requested",
+      rodada: 0,
+      turnoAtual: null,
+      participantes: result.combatentes!.length,
+      combatentes: result.combatentes!,
+    } : item));
+    setNotice("Iniciativa solicitada. Os jogadores receberam o pop-up e os NPCs aguardam a rolagem do mestre.");
+  }
+  async function rollActorInitiative(encounter: EncontroDaCampanha, combatantId: string) {
+    const response = await fetch("/api/master/initiative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "roll_actor", campaignId, encounterId: encounter.id, combatantId, sessionId }),
+    });
+    const result = (await response.json()) as { combatentes?: EncontroDaCampanha["combatentes"]; error?: string };
+    if (!response.ok || !result.combatentes) return setNotice(result.error ?? "Não foi possível rolar a iniciativa.");
+    const active = result.combatentes.every((item) => item.iniciativa !== null);
+    commitEncounters((items) => items.map((item) => item.id === encounter.id ? {
+      ...item,
+      iniciativaEstado: active ? "active" : "requested",
+      rodada: active ? 1 : 0,
+      turnoAtual: active ? 0 : null,
+      combatentes: result.combatentes!,
+    } : item));
+    setNotice(active ? "Todos rolaram. A ordem de iniciativa está ativa." : "Iniciativa do NPC registrada e publicada.");
+  }
   async function addActor(actor: AtorDaCampanha, visibleToPlayers: boolean) {
     const response = await fetch("/api/master/map/tokens", {
       method: "POST",
@@ -302,7 +344,8 @@ export function SessionOperations({
     );
   }
   async function resolve(requestId: string, approved: boolean) {
-    const response = await fetch("/api/abilities/requests", {
+    const request = requests.find((item) => item.id === requestId);
+    const response = await fetch(request?.requestKind === "attack" ? "/api/combat/requests" : "/api/abilities/requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "resolve", campaignId, requestId, approved }),
@@ -419,6 +462,19 @@ export function SessionOperations({
                     </strong>
                     <span className="tag">rodada {item.rodada}</span>
                   </div>
+                  <button
+                    className="btn btn-primary mt-2 w-full"
+                    type="button"
+                    onClick={() => void requestInitiative(item)}
+                  >
+                    <Dices size={13} />
+                    {item.iniciativaEstado === "idle" ? "Solicitar iniciativa dos participantes da cena" : "Solicitar iniciativa novamente"}
+                  </button>
+                  {item.iniciativaEstado === "requested" && (
+                    <p className="mt-2 rounded border border-[#6d5527] bg-[#6d5527]/10 p-2 text-xs text-[#e8c16d]">
+                      Aguardando as rolagens. O combate só começa quando todos tiverem iniciativa.
+                    </p>
+                  )}
                   <form
                     className="mt-2 grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-1.5"
                     onSubmit={(event) => {
@@ -495,6 +551,17 @@ export function SessionOperations({
                           }
                         />
                         <span className="flex gap-1">
+                          {combatente.actorId && combatente.tipo !== "character" && combatente.iniciativa === null && (
+                            <button
+                              className="btn px-1.5 text-[#e8c16d]"
+                              type="button"
+                              aria-label={`Rolar iniciativa de ${combatente.nome}`}
+                              title="Rolar pelo NPC"
+                              onClick={() => void rollActorInitiative(item, combatente.id)}
+                            >
+                              <Dices size={11} />
+                            </button>
+                          )}
                           <button
                             className="btn px-1.5"
                             type="button"
@@ -640,7 +707,7 @@ export function SessionOperations({
       </article>
       <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
         <div className="flex items-center justify-between">
-          <h2 className="font-extrabold">Solicitações de habilidades</h2>
+          <h2 className="font-extrabold">Solicitações de combate</h2>
           <span className="tag">
             {requests.filter((item) => !item.decision).length} pendente(s)
           </span>
@@ -652,6 +719,7 @@ export function SessionOperations({
                 {item.characterName} · {item.abilityName}
               </strong>
               <p className="mt-1 text-xs text-[#858891]">{item.context}</p>
+              {item.targetNames.length > 0 && <p className="mt-1 text-xs text-[#d2a8ad]"><strong>Alvo(s):</strong> {item.targetNames.join(", ")}</p>}
               {!item.decision ? (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button

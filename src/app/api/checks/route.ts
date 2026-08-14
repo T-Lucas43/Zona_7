@@ -7,6 +7,7 @@ import { buildCheckPlan, resolveCheck } from "@/lib/rules/engine";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireCampaignMaster } from "@/server/services/master-access";
+import { sortInitiativeCombatants } from "@/lib/initiative";
 
 const schema = z.discriminatedUnion("action", [
   z.object({
@@ -59,6 +60,12 @@ export async function POST(request: Request) {
     }
     const user = await getCurrentUser("player");
     if (!user) return NextResponse.json({ error: "Entre na conta vinculada ao personagem." }, { status: 401 });
+    const admin = createAdminClient();
+    const { data: requestMeta } = await admin
+      .from("roll_requests")
+      .select("request_kind,encounter_id,encounter_combatant_id")
+      .eq("id", input.requestId)
+      .maybeSingle();
     const playerClient = await createClient();
     const { data: claim, error: claimError } = await playerClient.rpc("claim_character_check", {
       p_request_id: input.requestId,
@@ -99,7 +106,7 @@ export async function POST(request: Request) {
       keep: plan.keep,
       mode: check.method,
     });
-    const { data: completed, error: completeError } = await createAdminClient().rpc("complete_character_check", {
+    const { data: completed, error: completeError } = await admin.rpc("complete_character_check", {
       p_request_id: input.requestId,
       p_actor_user_id: user.id,
       p_formula: rolled.normalized,
@@ -112,6 +119,30 @@ export async function POST(request: Request) {
       p_idempotency_key: crypto.randomUUID(),
     });
     if (completeError) throw new Error(completeError.message);
+    if (requestMeta?.request_kind === "initiative" && requestMeta.encounter_id && requestMeta.encounter_combatant_id) {
+      const { error: memberError } = await admin.from("encounter_combatants").update({
+        initiative: resolution.total,
+        visible_state: "Pronto",
+      }).eq("id", requestMeta.encounter_combatant_id).eq("encounter_id", requestMeta.encounter_id);
+      if (memberError) throw new Error(memberError.message);
+      const { data: members, error: membersError } = await admin
+        .from("encounter_combatants")
+        .select("id,display_name,initiative,position,initiative_bonus,agility")
+        .eq("encounter_id", requestMeta.encounter_id);
+      if (membersError) throw new Error(membersError.message);
+      const ordered = sortInitiativeCombatants(members);
+      const updates = await Promise.all(ordered.map((member, position) => admin.from("encounter_combatants").update({ position }).eq("id", member.id)));
+      const orderError = updates.find((update) => update.error)?.error;
+      if (orderError) throw new Error(orderError.message);
+      if (ordered.length > 0 && ordered.every((member) => member.initiative !== null)) {
+        const { error: encounterError } = await admin.from("encounters").update({
+          initiative_state: "active",
+          current_turn_position: 0,
+          round: 1,
+        }).eq("id", requestMeta.encounter_id);
+        if (encounterError) throw new Error(encounterError.message);
+      }
+    }
     return NextResponse.json({
       ...rolled,
       total: resolution.total,

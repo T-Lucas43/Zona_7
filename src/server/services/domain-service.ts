@@ -215,6 +215,9 @@ export async function createCharacterAbility(input: {
   successEffect?: string;
   partialEffect?: string;
   failureEffect?: string;
+  targetScope?: "self" | "ally" | "enemy" | "any";
+  targetMin?: number;
+  targetMax?: number;
 }) {
   const supabase = await clientOrDemo();
   if (!supabase) return demoResult("ability_created");
@@ -243,6 +246,9 @@ export async function createCharacterAbility(input: {
         success_effect: input.successEffect?.trim() || null,
         partial_effect: input.partialEffect?.trim() || null,
         failure_effect: input.failureEffect?.trim() || null,
+        target_scope: input.targetScope ?? "any",
+        target_min: input.targetMin ?? 0,
+        target_max: input.targetMax ?? 1,
         updated_by: input.actorUserId,
       })
       .eq("id", result.abilityId)

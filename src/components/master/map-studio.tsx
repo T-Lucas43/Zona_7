@@ -639,13 +639,9 @@ export function MapStudio({
                     if (!collective && token.characterId) onSelectCharacter?.(token.characterId);
                   }}
                 >
-                  <span className="map-token-shadow" aria-hidden="true" />
-                  <span className="map-token-body" aria-hidden="true">
-                    <span />
-                  </span>
                   <span
                     className="map-token-head"
-                    style={{ backgroundColor: token.cor, ...portraitStyle }}
+                    style={{ backgroundColor: portraitStyle ? "transparent" : token.cor, ...portraitStyle }}
                     data-portrait={portraitStyle ? "true" : "false"}
                   >
                     {!portraitStyle && (token.nome ?? "TK").slice(0, 2).toUpperCase()}

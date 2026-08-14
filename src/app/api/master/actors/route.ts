@@ -57,6 +57,12 @@ export async function POST(request: Request) {
         control_level: "full",
         granted_by: user.id,
       });
+      const { error: profileError } = await supabase.from("actor_combat_profiles").insert({
+        actor_id: data.id,
+        campaign_id: input.campaignId,
+        classification: input.actorType === "threat" ? "Inimigo" : "NPC",
+      });
+      if (profileError) throw new Error(profileError.message);
       return NextResponse.json(data, { status: 201 });
     }
     const { error } = await supabase

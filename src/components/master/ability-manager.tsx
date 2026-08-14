@@ -46,6 +46,9 @@ export function AbilityManager({
   const [sucesso, setSucesso] = useState("");
   const [parcial, setParcial] = useState("");
   const [falha, setFalha] = useState("");
+  const [escopoAlvo, setEscopoAlvo] = useState<"self" | "ally" | "enemy" | "any">("any");
+  const [alvosMinimos, setAlvosMinimos] = useState(0);
+  const [alvosMaximos, setAlvosMaximos] = useState(1);
 
   async function criar(event: React.FormEvent) {
     event.preventDefault();
@@ -70,6 +73,9 @@ export function AbilityManager({
         successEffect: sucesso,
         partialEffect: parcial,
         failureEffect: falha,
+        targetScope: escopoAlvo,
+        targetMin: alvosMinimos,
+        targetMax: alvosMaximos,
       }),
     });
     const result = (await response.json()) as {
@@ -97,6 +103,9 @@ export function AbilityManager({
         successEffect: sucesso,
         partialEffect: parcial,
         failureEffect: falha,
+        targetScope: escopoAlvo,
+        targetMin: alvosMinimos,
+        targetMax: alvosMaximos,
       },
     ]);
     setNome("");
@@ -221,6 +230,8 @@ export function AbilityManager({
           </label>
           <label className="text-xs font-bold md:col-span-2">Critério de uso<textarea required className="field mt-1 min-h-20" value={criterio} onChange={(event) => setCriterio(event.target.value)} placeholder="Quando e sob quais condições pode ser solicitada" /></label>
           <label className="text-xs font-bold md:col-span-2">Como pode ser aplicada<textarea required className="field mt-1 min-h-20" value={aplicacao} onChange={(event) => setAplicacao(event.target.value)} placeholder="Alvo, alcance, duração e forma de aplicação" /></label>
+          <label className="text-xs font-bold">Quem pode ser alvo<select className="field mt-1" value={escopoAlvo} onChange={(event) => setEscopoAlvo(event.target.value as typeof escopoAlvo)}><option value="self">O próprio personagem</option><option value="ally">Aliados</option><option value="enemy">Inimigos/NPCs</option><option value="any">Qualquer participante</option></select></label>
+          <div className="grid grid-cols-2 gap-2"><label className="text-xs font-bold">Mínimo de alvos<input className="field mt-1" type="number" min={0} max={20} value={alvosMinimos} onChange={(event) => setAlvosMinimos(Number(event.target.value))} /></label><label className="text-xs font-bold">Máximo de alvos<input className="field mt-1" type="number" min={0} max={20} value={alvosMaximos} onChange={(event) => setAlvosMaximos(Number(event.target.value))} /></label></div>
           <label className="text-xs font-bold">Teste<input required className="field mt-1 font-mono" value={teste} onChange={(event) => setTeste(event.target.value)} placeholder="Ex.: 1d20+5" /></label>
           <label className="text-xs font-bold">Dificuldade (DT)<input className="field mt-1" type="number" min={0} max={999} value={dificuldade} onChange={(event) => setDificuldade(Number(event.target.value))} /></label>
           <label className="text-xs font-bold md:col-span-2">Efeito no sucesso<textarea required className="field mt-1 min-h-20" value={sucesso} onChange={(event) => setSucesso(event.target.value)} /></label>

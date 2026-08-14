@@ -35,7 +35,9 @@ export function CheckRequestPopup({ requests }: { requests: CharacterCheckReques
         <header>
           <span>
             <Dices size={18} />
-            <strong id="check-request-popup-title">Teste solicitado pelo mestre</strong>
+            <strong id="check-request-popup-title">
+              {active.requestKind === "initiative" ? "Iniciativa solicitada pelo mestre" : "Teste solicitado pelo mestre"}
+            </strong>
           </span>
           <button className="btn px-2" type="button" onClick={close} aria-label="Fechar solicitação">
             <X size={15} />

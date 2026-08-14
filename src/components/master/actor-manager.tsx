@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Archive, Eye, EyeOff, ImageUp, MapPinned, Plus, RotateCcw, Sparkles } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { AtorDaCampanha } from "@/server/repositories/master-repository";
+import { ActorCombatEditor } from "@/components/master/actor-combat-editor";
 
 export function ActorManager({
   campaignId,
@@ -137,6 +138,7 @@ export function ActorManager({
                 <button className="btn" type="button" disabled={ator.estado === "Arquivado"} onClick={() => void inserirNaCena(ator, false)}><EyeOff size={14} /> Inserir só para mestre</button>
                 <button className="btn border-[#356248] text-[#87d9ab]" type="button" disabled={ator.estado === "Arquivado"} onClick={() => void inserirNaCena(ator, true)}><Eye size={14} /> Inserir para todos</button>
               </div>
+              <ActorCombatEditor campaignId={campaignId} actor={ator} />
             </article>
           ))}
         </div>

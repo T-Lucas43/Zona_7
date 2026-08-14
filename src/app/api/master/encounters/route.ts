@@ -55,63 +55,12 @@ export async function POST(request: Request) {
             .eq("id", input.encounterId)
             .eq("campaign_id", input.campaignId);
     const { data, error } = await query
-      .select("id,name,status,round,current_turn_position,gm_notes")
+      .select("id,name,status,round,current_turn_position,gm_notes,initiative_state")
       .single();
     if (error) throw new Error(error.message);
-    if (input.action === "create" && input.sessionId) {
-      const { data: participants, error: participantsError } = await supabase
-        .from("session_participants")
-        .select("character_id,characters(name)")
-        .eq("campaign_id", input.campaignId)
-        .eq("session_id", input.sessionId)
-        .eq("status", "online")
-        .not("character_id", "is", null);
-      if (participantsError) throw new Error(participantsError.message);
-      const participantIds = (participants ?? []).flatMap((participant) =>
-        participant.character_id ? [participant.character_id] : [],
-      );
-      const { data: resources, error: resourcesError } = participantIds.length
-        ? await supabase
-            .from("character_resources")
-            .select("character_id,current_value,maximum_value")
-            .in("character_id", participantIds)
-            .eq("resource", "pv")
-        : { data: [], error: null };
-      if (resourcesError) throw new Error(resourcesError.message);
-      const pvByCharacter = new Map(
-        (resources ?? []).map((resource) => [resource.character_id, resource]),
-      );
-      const initialCombatants = (participants ?? []).flatMap((participant, position) => {
-        const related = Array.isArray(participant.characters)
-          ? participant.characters[0]
-          : participant.characters;
-        return related?.name && participant.character_id
-          ? [
-              {
-                campaign_id: input.campaignId,
-                encounter_id: data.id,
-                character_id: participant.character_id,
-                display_name: related.name,
-                kind: "character" as const,
-                position,
-                current_hp: pvByCharacter.get(participant.character_id)?.current_value ?? null,
-                maximum_hp: pvByCharacter.get(participant.character_id)?.maximum_value ?? null,
-                hidden_hp: false,
-                visible_state: "Ativo",
-              },
-            ]
-          : [];
-      });
-      if (initialCombatants.length > 0) {
-        const { error: insertError } = await supabase
-          .from("encounter_combatants")
-          .insert(initialCombatants);
-        if (insertError) throw new Error(insertError.message);
-      }
-    }
     const { data: combatantRows, error: combatantError } = await supabase
       .from("encounter_combatants")
-      .select("id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state")
+      .select("id,character_id,actor_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state")
       .eq("encounter_id", data.id)
       .eq("campaign_id", input.campaignId)
       .order("position");
@@ -126,9 +75,11 @@ export async function POST(request: Request) {
           participantes: combatantRows.length,
           observacoes: data.gm_notes ?? "",
           turnoAtual: data.current_turn_position,
+          iniciativaEstado: data.initiative_state ?? "idle",
           combatentes: combatantRows.map((combatente) => ({
             id: combatente.id,
             characterId: combatente.character_id,
+            actorId: combatente.actor_id,
             nome: combatente.display_name,
             tipo: combatente.kind,
             iniciativa: combatente.initiative,

@@ -250,7 +250,7 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
   const { data, error } = await supabase
     .from("character_abilities")
     .select(
-      "id,state,character_id,public_override,abilities(id,name,public_description,action_type,costs,usage_limit,recommended_nex,use_criteria,application_text,test_formula,difficulty,success_effect,partial_effect,failure_effect)",
+      "id,state,character_id,public_override,abilities(id,name,public_description,action_type,costs,usage_limit,recommended_nex,use_criteria,application_text,test_formula,difficulty,success_effect,partial_effect,failure_effect,target_scope,target_min,target_max)",
     )
     .eq("character_id", characterId);
   if (error) throw new Error(`Falha ao carregar habilidades: ${error.message}`);
@@ -275,6 +275,9 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
         success_effect: string | null;
         partial_effect: string | null;
         failure_effect: string | null;
+        target_scope: "self" | "ally" | "enemy" | "any";
+        target_min: number;
+        target_max: number;
       } | null;
     }>
   ).flatMap((link) =>
@@ -299,6 +302,9 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
             successEffect: link.abilities.success_effect ?? undefined,
             partialEffect: link.abilities.partial_effect ?? undefined,
             failureEffect: link.abilities.failure_effect ?? undefined,
+            targetScope: link.abilities.target_scope,
+            targetMin: link.abilities.target_min,
+            targetMax: link.abilities.target_max,
           },
         ]
       : link.state === "masked"
@@ -320,6 +326,9 @@ export async function getCharacterAbilities(characterId: string): Promise<Abilit
               successEffect: undefined,
               partialEffect: undefined,
               failureEffect: undefined,
+              targetScope: "any",
+              targetMin: 0,
+              targetMax: 1,
             },
           ]
         : [],
@@ -1059,11 +1068,14 @@ export async function getCharacterActions(characterId: string) {
     return (demoActions[characterId] ?? demoActions.davi ?? []).map((action) => ({
       ...action,
       description: "",
+      targetScope: "enemy" as const,
+      targetMin: 1,
+      targetMax: 1,
     }));
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("attacks")
-    .select("id,name,attack_formula,damage_formula,range_text,damage_type,description")
+    .select("id,name,attack_formula,damage_formula,range_text,damage_type,description,target_scope,target_min,target_max")
     .eq("character_id", characterId)
     .eq("is_active", true)
     .is("deleted_at", null)
@@ -1077,6 +1089,9 @@ export async function getCharacterActions(characterId: string) {
     range: action.range_text ?? "—",
     type: action.damage_type ?? "—",
     description: action.description ?? "",
+    targetScope: action.target_scope as "self" | "ally" | "enemy" | "any",
+    targetMin: action.target_min,
+    targetMax: action.target_max,
   }));
 }
 
@@ -1136,6 +1151,8 @@ export type AbilityUseRequest = {
   context: string;
   rolled: boolean;
   createdAt: string;
+  requestKind: "ability" | "attack";
+  targetNames: string[];
 };
 
 export async function getSessionAbilityRequests(sessionId: string): Promise<AbilityUseRequest[]> {
@@ -1144,10 +1161,10 @@ export async function getSessionAbilityRequests(sessionId: string): Promise<Abil
   const { data, error } = await supabase
     .from("roll_requests")
     .select(
-      "id,character_id,character_ability_id,status,decision,context,rolled_at,created_at,characters(name),character_abilities(abilities(name))",
+      "id,character_id,character_ability_id,character_attack_id,request_kind,target_snapshot,status,decision,context,rolled_at,created_at,characters(name),character_abilities(abilities(name)),attack:attacks!roll_requests_character_attack_id_fkey(name)",
     )
     .eq("session_id", sessionId)
-    .not("character_ability_id", "is", null)
+    .or("character_ability_id.not.is.null,character_attack_id.not.is.null")
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw new Error(`Falha ao carregar solicitações: ${error.message}`);
@@ -1155,7 +1172,10 @@ export async function getSessionAbilityRequests(sessionId: string): Promise<Abil
     data as unknown as Array<{
       id: string;
       character_id: string;
-      character_ability_id: string;
+      character_ability_id: string | null;
+      character_attack_id: string | null;
+      request_kind: string;
+      target_snapshot: Array<{ name?: string }>;
       status: string;
       decision: string | null;
       context: string;
@@ -1163,18 +1183,21 @@ export async function getSessionAbilityRequests(sessionId: string): Promise<Abil
       created_at: string;
       characters: { name: string } | null;
       character_abilities: { abilities: { name: string } | null } | null;
+      attack: { name: string } | null;
     }>
   ).map((item) => ({
     id: item.id,
     characterId: item.character_id,
     characterName: item.characters?.name ?? "Personagem",
-    characterAbilityId: item.character_ability_id,
-    abilityName: item.character_abilities?.abilities?.name ?? "Habilidade",
+    characterAbilityId: item.character_ability_id ?? item.character_attack_id ?? "",
+    abilityName: item.character_abilities?.abilities?.name ?? item.attack?.name ?? "Ação",
     status: item.status,
     decision: item.decision,
     context: item.context,
     rolled: Boolean(item.rolled_at),
     createdAt: item.created_at,
+    requestKind: item.request_kind === "attack" ? "attack" : "ability",
+    targetNames: (item.target_snapshot ?? []).flatMap((target) => target.name ? [target.name] : []),
   }));
 }
 
@@ -1188,6 +1211,7 @@ export type CharacterCheckRequest = {
   context: string;
   method: "roll" | "take_10" | "take_20";
   createdAt: string;
+  requestKind: "check" | "initiative";
 };
 
 export async function getSessionCheckRequests(sessionId: string): Promise<CharacterCheckRequest[]> {
@@ -1203,12 +1227,13 @@ export async function getSessionCheckRequests(sessionId: string): Promise<Charac
         context: "Resistir à influência da Zona.",
         method: "roll",
         createdAt: new Date().toISOString(),
+        requestKind: "check",
       },
     ];
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("roll_requests")
-    .select("id,character_id,attribute_key,skill_name,difficulty,context,method,created_at,characters(name)")
+    .select("id,character_id,attribute_key,skill_name,difficulty,context,method,request_kind,created_at,characters(name)")
     .eq("session_id", sessionId)
     .is("character_ability_id", null)
     .eq("status", "pending")
@@ -1219,7 +1244,7 @@ export async function getSessionCheckRequests(sessionId: string): Promise<Charac
   return (data as unknown as Array<{
     id: string; character_id: string; attribute_key: string; skill_name: string | null;
     difficulty: number; context: string; method: "roll" | "take_10" | "take_20";
-    created_at: string; characters: { name: string } | null;
+    request_kind: string; created_at: string; characters: { name: string } | null;
   }>).map((item) => ({
     id: item.id,
     characterId: item.character_id,
@@ -1230,6 +1255,7 @@ export async function getSessionCheckRequests(sessionId: string): Promise<Charac
     context: item.context,
     method: item.method,
     createdAt: item.created_at,
+    requestKind: item.request_kind === "initiative" ? "initiative" : "check",
   }));
 }
 

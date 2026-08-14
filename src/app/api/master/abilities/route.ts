@@ -31,11 +31,15 @@ const schema = z.object({
   successEffect: z.string().trim().min(2).max(4_000),
   partialEffect: z.string().trim().max(4_000).optional(),
   failureEffect: z.string().trim().min(2).max(4_000),
+  targetScope: z.enum(["self", "ally", "enemy", "any"]),
+  targetMin: z.number().int().min(0).max(20),
+  targetMax: z.number().int().min(0).max(20),
 });
 
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
+    if (input.targetMax < input.targetMin) throw new Error("O máximo de alvos não pode ser menor que o mínimo.");
     const user = await requireCampaignMaster(input.campaignId);
     const result = await createCharacterAbility({
       ...input,
