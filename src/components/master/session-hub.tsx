@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Backpack,
@@ -38,6 +38,7 @@ import { SessionTimeline } from "@/components/master/session-timeline";
 import { SessionSummaryManager } from "@/components/master/session-summary-manager";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
+import { readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
 import type {
   AtorDaCampanha,
@@ -144,6 +145,8 @@ export function SessionHub({
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [liveEncounters, setLiveEncounters] = useState(encounters);
   const [sceneSelection, setSceneSelection] = useState<CenaDaCampanha["tokens"][number] | null>(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `zona7:session-hub:${campaignId}:${session.id}`;
   const selected = useMemo(
     () => characters.find((item) => item.id === selectedId) ?? characters[0],
     [characters, selectedId],
@@ -166,6 +169,55 @@ export function SessionHub({
   const selectedHasEnergy = (selected?.resources.pe.current ?? 0) > 0;
   const selectedToken = scene.tokens.find((token) => token.characterId === selected?.id);
   const nearestThreat = selectedToken ? scene.tokens.filter((token) => token.atorId && ["threat", "entity", "npc"].includes(token.actorType ?? "")).map((token) => ({ token, distance: Math.hypot((token.x - selectedToken.x) * 16, (token.y - selectedToken.y) * 9) })).sort((a, b) => a.distance - b.distance)[0] : undefined;
+  useEffect(() => {
+    const draft = readSessionDraft<{
+      selectedId: string;
+      reason: string;
+      deliveryName: string;
+      deliveryDetails: string;
+      messageSender: string;
+      messageBody: string;
+      publicState: SessionPublicState;
+      sheetTab: "summary" | "inventory" | "abilities" | "rules";
+    }>(draftKey);
+    const frame = window.requestAnimationFrame(() => {
+      if (draft) {
+        if (initialCharacters.some((character) => character.id === draft.selectedId)) setSelectedId(draft.selectedId);
+        setReason(draft.reason);
+        setDeliveryName(draft.deliveryName);
+        setDeliveryDetails(draft.deliveryDetails);
+        setMessageSender(draft.messageSender);
+        setMessageBody(draft.messageBody);
+        setPublicState(draft.publicState);
+        setSheetTab(draft.sheetTab);
+      }
+      setDraftReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftKey, initialCharacters]);
+  useEffect(() => {
+    if (!draftReady) return;
+    writeSessionDraft(draftKey, {
+      selectedId,
+      reason,
+      deliveryName,
+      deliveryDetails,
+      messageSender,
+      messageBody,
+      publicState,
+      sheetTab,
+    });
+  }, [deliveryDetails, deliveryName, draftKey, draftReady, messageBody, messageSender, publicState, reason, selectedId, sheetTab]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setCharacters(initialCharacters);
+      setDetails(characterDetails);
+      setVisible(new Set(visibleCharacterIds));
+      setSceneSyncEnabled(initialSceneSyncEnabled);
+      setLiveEncounters(encounters);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [characterDetails, encounters, initialCharacters, initialSceneSyncEnabled, visibleCharacterIds]);
   function focusControl(id: string) {
     window.requestAnimationFrame(() =>
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }),
@@ -502,20 +554,6 @@ export function SessionHub({
               <>
                 <div id="operacoes-sessao">
                 <SessionOperations
-                  key={JSON.stringify(
-                    encounters.map((encounter) => [
-                      encounter.id,
-                      encounter.estado,
-                      encounter.rodada,
-                      encounter.turnoAtual,
-                      encounter.combatentes.map((combatente) => [
-                        combatente.id,
-                        combatente.iniciativa,
-                        combatente.posicao,
-                        combatente.atual,
-                      ]),
-                    ]),
-                  )}
                   compact
                   campaignId={campaignId}
                   sessionId={session.id}

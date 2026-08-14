@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Gift,
@@ -86,7 +86,11 @@ export function MapStudio({
   const [revealEditing, setRevealEditing] = useState(false);
   const [revealTool, setRevealTool] = useState<"cover" | "erase">("cover");
   const [revealBrush, setRevealBrush] = useState(.05);
+  const [revealDraftReady, setRevealDraftReady] = useState(false);
+  const [revealServerReady, setRevealServerReady] = useState(false);
   const mapa = useRef<HTMLDivElement>(null);
+  const revealAutosave = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealDraftKey = `zona7:map-reveal:${campaignId}:${sessionId ?? "preparacao"}:${initialScene.id}`;
   const availableTokens = useMemo(
     () =>
       cena.tokens.filter(
@@ -108,21 +112,124 @@ export function MapStudio({
   const selectedMapItem = items.find((item) => item.id === selectedItemToken?.itemId);
   const nextZIndex = () => Math.max(0, ...cena.tokens.map((token) => token.zIndex)) + 1;
 
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setCena(initialScene);
+      setFundo(initialScene.backgroundUrl ?? null);
+      if (!revealEditing) setReveal(initialScene.reveal);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialScene, revealEditing]);
+
+  useEffect(() => {
+    let draft: { reveal?: typeof reveal; editing?: boolean } | null = null;
+    try {
+      const stored = window.sessionStorage.getItem(revealDraftKey);
+      if (stored) draft = JSON.parse(stored) as { reveal?: typeof reveal; editing?: boolean };
+    } catch {
+      window.sessionStorage.removeItem(revealDraftKey);
+    }
+    const frame = window.requestAnimationFrame(() => {
+      if (draft?.reveal && Array.isArray(draft.reveal.paths)) {
+        setReveal(draft.reveal);
+        setRevealEditing(draft.editing !== false);
+        setRevealServerReady(true);
+      }
+      setRevealDraftReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [revealDraftKey]);
+
+  const persistRevealMask = useCallback(async (
+    next: typeof reveal,
+    synchronized: boolean,
+    quiet = false,
+  ) => {
+    if (!sessionId) {
+      if (!quiet) setAviso("Inicie uma sessão para editar a ocultação do mapa.");
+      return false;
+    }
+    const response = await fetch("/api/master/map/reveal", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        campaignId,
+        sessionId,
+        sceneId: cena.id,
+        enabled: next.enabled,
+        synchronized,
+        paths: next.paths,
+      }),
+    });
+    const result = await response.json() as { version?: number; error?: string };
+    if (!response.ok) {
+      if (!quiet) setAviso(result.error ?? "Não foi possível salvar a máscara.");
+      return false;
+    }
+    if (!quiet) {
+      setReveal((current) => current.paths === next.paths
+        ? { ...current, synchronized, version: result.version ?? current.version + 1 }
+        : current);
+      setAviso(synchronized
+        ? "Máscara salva. Finalizando a sincronização com os jogadores."
+        : "Rascunho oculto salvo. Você pode continuar desenhando.");
+    }
+    return true;
+  }, [campaignId, cena.id, sessionId]);
+
+  useEffect(() => {
+    if (!revealDraftReady) return;
+    if (!revealEditing) {
+      window.sessionStorage.removeItem(revealDraftKey);
+      return;
+    }
+    window.sessionStorage.setItem(
+      revealDraftKey,
+      JSON.stringify({ reveal, editing: true, savedAt: new Date().toISOString() }),
+    );
+    if (!sessionId || !revealServerReady) return;
+    if (revealAutosave.current) clearTimeout(revealAutosave.current);
+    revealAutosave.current = setTimeout(() => {
+      void persistRevealMask(reveal, false, true);
+    }, 350);
+    return () => {
+      if (revealAutosave.current) clearTimeout(revealAutosave.current);
+    };
+  }, [persistRevealMask, reveal, revealDraftKey, revealDraftReady, revealEditing, revealServerReady, sessionId]);
+
+  async function beginRevealEditing() {
+    if (!sessionId) return setAviso("Inicie uma sessão para editar a ocultação do mapa.");
+    setRevealEditing(true);
+    setRevealServerReady(false);
+    setReveal((current) => ({ ...current, enabled: true, synchronized: false }));
+    setAviso("Dessincronizando a cena. Seu desenho já está protegido neste navegador.");
+    const desync = await fetch("/api/master/session/scene-sync", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: false }),
+    });
+    if (!desync.ok) return setAviso("O rascunho foi preservado, mas não foi possível dessincronizar a cena com segurança.");
+    setRevealServerReady(true);
+    setAviso("Cena dessincronizada. Cada traço agora é salvo automaticamente.");
+  }
+
   async function saveReveal(next: typeof reveal, synchronized: boolean) {
     if (!sessionId) return setAviso("Inicie uma sessão para editar a ocultação do mapa.");
+    if (synchronized) {
+      setRevealServerReady(false);
+      if (revealAutosave.current) clearTimeout(revealAutosave.current);
+    }
     if (!synchronized) {
       const desync = await fetch("/api/master/session/scene-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: false }) });
       if (!desync.ok) return setAviso("Não foi possível dessincronizar a cena com segurança.");
     }
-    const response = await fetch("/api/master/map/reveal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: next.enabled, synchronized, paths: next.paths }) });
-    const result = await response.json() as { version?: number; error?: string };
-    if (!response.ok) return setAviso(result.error ?? "Não foi possível salvar a máscara.");
-    const saved = { ...next, synchronized, version: result.version ?? next.version + 1 }; setReveal(saved);
+    const saved = await persistRevealMask(next, synchronized);
+    if (!saved) return;
     if (synchronized) {
       const sync = await fetch("/api/master/session/scene-sync", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, sceneId: cena.id, enabled: true }) });
       if (!sync.ok) return setAviso("A máscara foi salva, mas a cena continua dessincronizada.");
-      setRevealEditing(false); setAviso("Máscara publicada. A revelação foi atualizada em tempo real para todos os jogadores.");
-    } else { setRevealEditing(true); setAviso("Cena dessincronizada. Edite a máscara sem revelar segredos aos jogadores."); }
+      setRevealEditing(false); setRevealServerReady(false); window.sessionStorage.removeItem(revealDraftKey); setAviso("Máscara publicada. A revelação foi atualizada em tempo real para todos os jogadores.");
+    } else { setRevealEditing(true); setRevealServerReady(true); setAviso("Rascunho oculto salvo. Cada novo traço continua sendo salvo automaticamente."); }
   }
 
   async function persistToken(tokenId: string, x: number, y: number, zIndex: number) {
@@ -141,7 +248,7 @@ export function MapStudio({
   }
 
   async function mover(event: React.MouseEvent<HTMLDivElement>) {
-    if (collective || !mapa.current) return;
+    if (collective || revealEditing || !mapa.current) return;
     const rect = mapa.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
@@ -556,7 +663,7 @@ export function MapStudio({
                 <EyeOff size={17} className="text-[#d84b57]" />
                 <h3 className="mt-3 font-extrabold">Ocultação e revelação</h3>
                 <p className="mt-2 text-xs leading-5 text-[#858890]">Circule com a caneta para cobrir uma área de preto. Use a borracha para revelar aos poucos. A cena é dessincronizada antes da edição.</p>
-                {!revealEditing ? <button className="btn mt-3 w-full" type="button" disabled={!sessionId} onClick={() => void saveReveal({ ...reveal, enabled: true }, false)}><EyeOff size={14} /> Dessincronizar e editar</button> : <>
+                {!revealEditing ? <button className="btn mt-3 w-full" type="button" disabled={!sessionId} onClick={() => void beginRevealEditing()}><EyeOff size={14} /> Dessincronizar e editar</button> : <>
                   <div className="mt-3 grid grid-cols-2 gap-2"><button className={`btn ${revealTool === "cover" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("cover")}><Brush size={14} /> Caneta preta</button><button className={`btn ${revealTool === "erase" ? "btn-primary" : ""}`} type="button" onClick={() => setRevealTool("erase")}><Eraser size={14} /> Borracha</button></div>
                   <label className="mt-3 block text-xs font-bold">Tamanho da borracha/caneta<input className="mt-2 w-full accent-[#c92131]" type="range" min="1" max="20" value={Math.round(revealBrush * 100)} onChange={(event) => setRevealBrush(Number(event.target.value) / 100)} /></label>
                   <div className="mt-3 flex gap-2"><button className="btn flex-1" type="button" disabled={!reveal.paths.length} onClick={() => setReveal((value) => ({ ...value, paths: value.paths.slice(0, -1) }))}><Undo2 size={14} /> Desfazer traço</button><button className="btn flex-1" type="button" onClick={() => setReveal((value) => ({ ...value, paths: [] }))}><Trash2 size={14} /> Limpar</button></div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { History, RotateCcw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { SessionTimelineEntry } from "@/server/repositories/session-history-repository";
@@ -21,6 +21,10 @@ export function SessionTimeline({ campaignId, sessionId, initialEntries }: { cam
   const [reason, setReason] = useState("Correção confirmada pelo mestre");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setEntries(initialEntries));
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialEntries]);
   async function reverse() {
     if (!selected) return;
     setPending(true); setNotice("");

@@ -212,36 +212,6 @@ async function SessionConsole({
   );
   return (
     <SessionHub
-      key={JSON.stringify([
-        session.status,
-        session.round,
-        cena.backgroundKey,
-        cena.tokens.map((token) => [
-          token.id,
-          token.x,
-          token.y,
-          token.visivel,
-          token.characterState,
-          token.portraitKey,
-          token.itemImageKey,
-        ]),
-        cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
-        execucaoRoteiro?.runId,
-        execucaoRoteiro?.sequence,
-        elenco.map((character) => [
-          character.id,
-          character.version,
-          character.characterState,
-          character.attributes,
-          character.resources,
-        ]),
-        solicitacoes.map((request) => [request.id, request.decision, request.rolled]),
-        rolagens.map((roll) => [roll.id, roll.total]),
-        timeline.map((event) => [event.id, event.reversalStatus]),
-        latestSummary?.revision,
-        cena.reveal.version,
-        sceneState.enabled,
-      ])}
       campaignId={campaignId}
       session={session}
       initialPublicState={estadoPublico}
@@ -561,20 +531,6 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         <>
           <LiveSync campaignId={campaignId} fallbackIntervalMs={30_000} />
           <MapStudio
-            key={JSON.stringify([
-              cena.id,
-              cena.backgroundKey,
-              cena.tokens.map((token) => [
-                token.id,
-                token.x,
-                token.y,
-                token.visivel,
-                token.portraitKey,
-                token.itemImageKey,
-              ]),
-              cena.connections.map((connection) => [connection.fromTokenId, connection.toTokenId]),
-              mapCharacters.map((character) => character.id),
-            ])}
             campaignId={campaignId}
             initialScene={cena}
             allowedCharacterIds={mapCharacters.map((character) => character.id)}

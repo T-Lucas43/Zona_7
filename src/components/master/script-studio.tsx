@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   CircleStop,
@@ -129,11 +129,35 @@ export function ScriptStudio({
   const [variableName, setVariableName] = useState("nova_variavel");
   const [variableValue, setVariableValue] = useState("0");
   const [newNodeType, setNewNodeType] = useState("narration");
+  const [draftReady, setDraftReady] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const draftKey = `zona7:script-draft:${campaignId}`;
   const node = useMemo(
     () => documento?.nodes.find((item) => item.id === atual) ?? documento?.nodes[0],
     [documento, atual],
   );
+  useEffect(() => {
+    let draft: { source?: string; format?: "markdown" | "json" } | null = null;
+    try {
+      const stored = window.sessionStorage.getItem(draftKey);
+      if (stored) draft = JSON.parse(stored) as { source?: string; format?: "markdown" | "json" };
+    } catch {
+      window.sessionStorage.removeItem(draftKey);
+    }
+    const frame = window.requestAnimationFrame(() => {
+      if (draft?.source) setSource(draft.source);
+      if (draft?.format) setFormat(draft.format);
+      setDraftReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftReady) return;
+    window.sessionStorage.setItem(
+      draftKey,
+      JSON.stringify({ source, format, savedAt: new Date().toISOString() }),
+    );
+  }, [draftKey, draftReady, format, source]);
   async function validar() {
     const response = await fetch("/api/master/scripts/validate", {
       method: "POST",

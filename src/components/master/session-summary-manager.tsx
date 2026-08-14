@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileDown, FileText, RefreshCcw, Save } from "lucide-react";
+import { readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 import type { SessionSummaryData } from "@/server/repositories/session-history-repository";
 
 const fields = [
@@ -12,6 +13,19 @@ export function SessionSummaryManager({ campaignId, sessionId, sessionTitle, ini
   const empty: SessionSummaryData = { revision: 0, title: `Relatório - ${sessionTitle}`, overview: "", decisions: [], clues: [], items: [], conditions: [], deaths: [], meters: [], pendingTopics: [] };
   const [summary, setSummary] = useState(initialSummary ?? empty);
   const [notice, setNotice] = useState(""); const [pending, setPending] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `zona7:session-summary:${campaignId}:${sessionId}`;
+  useEffect(() => {
+    const draft = readSessionDraft<SessionSummaryData>(draftKey);
+    const frame = window.requestAnimationFrame(() => {
+      if (draft) setSummary(draft);
+      setDraftReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftKey]);
+  useEffect(() => {
+    if (draftReady) writeSessionDraft(draftKey, summary);
+  }, [draftKey, draftReady, summary]);
   async function act(action: "generate" | "save" | "publish") {
     setPending(true); setNotice("");
     const response = await fetch("/api/master/session/summary", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campaignId, sessionId, action, summary }) });

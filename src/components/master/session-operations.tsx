@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   Dices,
@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
+import { readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 import type { AbilityUseRequest } from "@/server/repositories/character-repository";
 import type { CharacterSummary } from "@/types/domain";
 import type {
@@ -67,6 +68,42 @@ export function SessionOperations({
   const [checkMethod, setCheckMethod] = useState<"roll" | "take_10" | "take_20">("roll");
   const [initiativeDrafts, setInitiativeDrafts] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState("");
+  const [draftReady, setDraftReady] = useState(false);
+  const draftKey = `zona7:session-operations:${campaignId}:${sessionId}`;
+  useEffect(() => {
+    const draft = readSessionDraft<{
+      encounterName: string; actorName: string; actorType: string; combatantName: string;
+      combatantKind: "character" | "ally" | "npc" | "enemy"; combatantInitiative: number;
+      checkCharacterId: string; checkAttribute: "agi" | "for" | "int" | "pre" | "vig";
+      checkSkill: string; checkDifficulty: number; checkContext: string; checkConsequences: string;
+      checkFavorable: number; checkUnfavorable: number; checkModifier: number;
+      checkMethod: "roll" | "take_10" | "take_20"; initiativeDrafts: Record<string, string>;
+    }>(draftKey);
+    const frame = window.requestAnimationFrame(() => {
+      if (draft) {
+        setEncounterName(draft.encounterName); setActorName(draft.actorName); setActorType(draft.actorType);
+        setCombatantName(draft.combatantName); setCombatantKind(draft.combatantKind); setCombatantInitiative(draft.combatantInitiative);
+        setCheckCharacterId(draft.checkCharacterId); setCheckAttribute(draft.checkAttribute); setCheckSkill(draft.checkSkill);
+        setCheckDifficulty(draft.checkDifficulty); setCheckContext(draft.checkContext); setCheckConsequences(draft.checkConsequences);
+        setCheckFavorable(draft.checkFavorable); setCheckUnfavorable(draft.checkUnfavorable); setCheckModifier(draft.checkModifier);
+        setCheckMethod(draft.checkMethod); setInitiativeDrafts(draft.initiativeDrafts);
+      }
+      setDraftReady(true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [draftKey]);
+  useEffect(() => {
+    if (!draftReady) return;
+    writeSessionDraft(draftKey, { encounterName, actorName, actorType, combatantName, combatantKind, combatantInitiative, checkCharacterId, checkAttribute, checkSkill, checkDifficulty, checkContext, checkConsequences, checkFavorable, checkUnfavorable, checkModifier, checkMethod, initiativeDrafts });
+  }, [actorName, actorType, checkAttribute, checkCharacterId, checkConsequences, checkContext, checkDifficulty, checkFavorable, checkMethod, checkModifier, checkSkill, checkUnfavorable, combatantInitiative, combatantKind, combatantName, draftKey, draftReady, encounterName, initiativeDrafts]);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setEncounters(initialEncounters);
+      setActors(initialActors);
+      setRequests(initialRequests);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [initialActors, initialEncounters, initialRequests]);
   function commitEncounters(
     update: (current: EncontroDaCampanha[]) => EncontroDaCampanha[],
   ) {
