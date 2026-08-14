@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Check, X } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/config";
 import { mergeNotifications, publishLiveNotification } from "@/lib/notification-events";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import { createClient } from "@/lib/supabase/client";
 import type { PlayerNotification } from "@/server/repositories/character-repository";
 
@@ -131,8 +132,13 @@ export function NotificationBell({
                 key={item.id}
               >
                 <div className="flex justify-between gap-2">
-                  <div>
-                    <strong className="text-xs">{item.title}</strong>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="text-xs">{item.title}</strong>
+                      <time className="font-mono text-[0.6rem] text-[#777b84]" dateTime={item.createdAt} title={formatDateTime(item.createdAt)}>
+                        {formatClockTime(item.createdAt)}
+                      </time>
+                    </div>
                     <p className="mt-1 text-xs leading-5 text-[#92959c]">{item.preview}</p>
                   </div>
                   {!item.acknowledged && (

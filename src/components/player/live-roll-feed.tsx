@@ -1,5 +1,6 @@
 import { Dices } from "lucide-react";
 import { RollingDie } from "@/components/dice/rolling-die";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import type { PublicDiceRoll } from "@/server/repositories/character-repository";
 
 export function LiveRollFeed({ rolls }: { rolls: PublicDiceRoll[] }) {
@@ -16,11 +17,20 @@ export function LiveRollFeed({ rolls }: { rolls: PublicDiceRoll[] }) {
             key={roll.id}
           >
             <div>
-              <strong className="text-sm">
-                {roll.playerName}
-                {roll.characterName !== roll.playerName ? ` como ${roll.characterName}` : ""} ·{" "}
-                {roll.purpose}
-              </strong>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <strong className="text-sm">
+                  {roll.playerName}
+                  {roll.characterName !== roll.playerName ? ` como ${roll.characterName}` : ""} ·{" "}
+                  {roll.purpose}
+                </strong>
+                <time
+                  className="rounded border border-[#343840] px-1.5 py-0.5 font-mono text-[0.62rem] text-[#b0b3ba]"
+                  dateTime={roll.createdAt}
+                  title={formatDateTime(roll.createdAt)}
+                >
+                  {formatClockTime(roll.createdAt)}
+                </time>
+              </div>
               <p className="mt-1 font-mono text-[0.65rem] text-[#858891]">
                 {roll.formula} · [{roll.rolls.join(", ")}]
               </p>

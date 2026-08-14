@@ -13,6 +13,7 @@ import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { SafetyTools } from "@/components/player/safety-tools";
 import { CheckRequestCard } from "@/components/player/check-request-card";
 import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import {
   getAuthorizedCharacters,
   getAuthorizedMessages,
@@ -358,7 +359,12 @@ export default async function PlayerSessionPage({
           {isCharacterSectionVisible(character, "messages") && authorizedMessages[0] && (
             <section className="panel rounded-lg p-5">
               <p className="eyebrow">sinal recebido</p>
-              <h2 className="mt-3 font-extrabold">{authorizedMessages[0].sender}</h2>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <h2 className="font-extrabold">{authorizedMessages[0].sender}</h2>
+                <time className="font-mono text-[0.65rem] text-[#969aa3]" dateTime={authorizedMessages[0].createdAt} title={formatDateTime(authorizedMessages[0].createdAt)}>
+                  {formatClockTime(authorizedMessages[0].createdAt)}
+                </time>
+              </div>
               <p className="mt-3 text-sm leading-6 text-[#b8bac0]">{authorizedMessages[0].body}</p>
             </section>
           )}

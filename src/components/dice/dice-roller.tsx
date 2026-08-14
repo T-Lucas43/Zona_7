@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Dices, LoaderCircle } from "lucide-react";
 import { RollingDie } from "@/components/dice/rolling-die";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 
-type Result = { total: number; rolls: number[]; normalized: string; keptIndexes: number[] };
+type Result = { total: number; rolls: number[]; normalized: string; keptIndexes: number[]; createdAt: string };
 
 export function DiceRoller({
   compact = false,
@@ -102,7 +103,16 @@ export function DiceRoller({
           aria-live="polite"
         >
           <div>
-            <span className="font-mono text-xs text-[#7e8189]">{result.normalized}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-xs text-[#7e8189]">{result.normalized}</span>
+              <time
+                className="font-mono text-[0.65rem] text-[#a5a8af]"
+                dateTime={result.createdAt}
+                title={formatDateTime(result.createdAt)}
+              >
+                {formatClockTime(result.createdAt)}
+              </time>
+            </div>
             <div className="mt-1 flex gap-1.5 text-xs text-[#a6a9af]">
               {result.rolls.map((rollValue, index) => (
                 <span

@@ -413,7 +413,7 @@ export async function getAuthorizedMessages() {
   const { data, error } = await supabase
     .from("messages")
     .select(
-      "id,apparent_sender_name,status,message_contents(body),message_recipients!inner(user_id)",
+      "id,apparent_sender_name,status,created_at,message_contents(body),message_recipients!inner(user_id)",
     )
     .eq("message_recipients.user_id", userData.user.id)
     .order("created_at", { ascending: false });
@@ -423,6 +423,7 @@ export async function getAuthorizedMessages() {
       id: string;
       apparent_sender_name: string;
       status: string;
+      created_at: string;
       message_contents: { body: string | null } | null;
     }>
   ).map((message) => ({
@@ -431,6 +432,7 @@ export async function getAuthorizedMessages() {
     body: message.message_contents?.body ?? "Conteúdo indisponível.",
     status: message.status,
     recipient: "Você",
+    createdAt: message.created_at,
   }));
 }
 

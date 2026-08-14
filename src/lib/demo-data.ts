@@ -566,6 +566,7 @@ export const messages = [
     body: "VOCÊ AINDA É O FAVORITO.",
     status: "agendada",
     recipient: "Davi Brito",
+    createdAt: "2026-08-14T14:42:00.000Z",
   },
   {
     id: "m2",
@@ -573,6 +574,7 @@ export const messages = [
     body: "Uma câmera girou sem energia. O registro começa sete segundos antes.",
     status: "entregue",
     recipient: "Todos presentes",
+    createdAt: "2026-08-14T14:35:00.000Z",
   },
 ];
 

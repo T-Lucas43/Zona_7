@@ -38,6 +38,7 @@ import { SessionTimeline } from "@/components/master/session-timeline";
 import { SessionSummaryManager } from "@/components/master/session-summary-manager";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { publishDemoRealtime } from "@/lib/demo-realtime";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import { readSessionDraft, writeSessionDraft } from "@/lib/session-draft";
 import type { CharacterSummary, ResourceKind, SessionSummary } from "@/types/domain";
 import type {
@@ -1193,7 +1194,7 @@ export function SessionHub({
                 <div className="mt-3 space-y-2">
                   {initialRolls.slice(0, 3).map((roll) => (
                     <article key={roll.id}>
-                      <span>{new Date(roll.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <time dateTime={roll.createdAt} title={formatDateTime(roll.createdAt)}>{formatClockTime(roll.createdAt)}</time>
                       <p><strong>{roll.playerName}</strong> rolou {roll.purpose}: <b>{roll.total}</b></p>
                     </article>
                   ))}

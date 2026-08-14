@@ -24,6 +24,7 @@ import { MeterControl } from "@/components/master/meter-control";
 import { NotebookManager } from "@/components/master/notebook-manager";
 import { ResourceConsole } from "@/components/master/resource-console";
 import { RuleCatalogManager } from "@/components/master/rule-catalog-manager";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import { SessionHub } from "@/components/master/session-hub";
 import { SessionItemManager } from "@/components/master/session-item-manager";
 import { ScriptStudio } from "@/components/master/script-studio";
@@ -433,9 +434,14 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
           <section className="grid gap-3 md:grid-cols-2">
             {mensagens.map((message) => (
               <article className="panel rounded-lg p-4" key={message.id}>
-                <p className="eyebrow">
-                  {message.remetente} → {message.destinatarios} destinatário(s)
-                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="eyebrow">
+                    {message.remetente} → {message.destinatarios} destinatário(s)
+                  </p>
+                  <time className="font-mono text-[0.65rem] text-[#969aa3]" dateTime={message.criadoEm} title={formatDateTime(message.criadoEm)}>
+                    {formatClockTime(message.criadoEm)}
+                  </time>
+                </div>
                 <p className="mt-2 text-sm">{message.corpo || "Mensagem sem conteúdo textual."}</p>
                 <span className="tag mt-3">{message.estado}</span>
               </article>

@@ -6,7 +6,8 @@ import { diceRollSchema } from "@/lib/validation/schemas";
 export async function rollDice(input: unknown, actorUserId: string) {
   const request = diceRollSchema.parse(input);
   const result = executeDiceRoll(request.formula);
-  if (!isSupabaseConfigured) return { ...result, id: crypto.randomUUID(), demo: true };
+  if (!isSupabaseConfigured)
+    return { ...result, id: crypto.randomUUID(), createdAt: new Date().toISOString(), demo: true };
 
   const supabase = await createClient();
   const { data: rollerProfile } = await supabase
@@ -44,8 +45,8 @@ export async function rollDice(input: unknown, actorUserId: string) {
       purpose: request.purpose,
       visibility: request.visibility,
     })
-    .select("id")
+    .select("id,created_at")
     .single();
   if (error) throw new Error(error.message);
-  return { ...result, id: data.id, demo: false };
+  return { ...result, id: data.id, createdAt: data.created_at, demo: false };
 }

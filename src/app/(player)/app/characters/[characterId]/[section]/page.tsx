@@ -15,6 +15,7 @@ import { InvestigationBoard } from "@/components/master/investigation-board";
 import { LiveSync } from "@/components/live-sync";
 import { NotificationCenter } from "@/components/player/notification-center";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import {
   getAuthorizedCharacter,
   getAuthorizedHandouts,
@@ -274,8 +275,11 @@ export default async function CharacterSectionPage({
           <NotificationCenter initial={notifications} authorizedCharacterIds={[character.id]} />
           {messages.map((message) => (
             <article className="panel rounded-lg p-5" key={message.id}>
-              <div className="flex items-center gap-2 text-xs font-bold text-[#dd5965]">
-                <MessageSquare size={14} /> {message.sender}
+              <div className="flex items-center justify-between gap-3 text-xs font-bold text-[#dd5965]">
+                <span className="flex items-center gap-2"><MessageSquare size={14} /> {message.sender}</span>
+                <time className="font-mono text-[0.65rem] font-normal text-[#969aa3]" dateTime={message.createdAt} title={formatDateTime(message.createdAt)}>
+                  {formatClockTime(message.createdAt)}
+                </time>
               </div>
               <p className="mt-3 text-sm leading-6">{message.body}</p>
               <p className="mt-3 font-mono text-[0.65rem] text-[#666971]">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bell, Check, Package, ScrollText } from "lucide-react";
 import { demoRealtimeChannel, type DemoRealtimeEvent } from "@/lib/demo-realtime";
 import { liveNotificationEvent } from "@/lib/notification-events";
+import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import type { PlayerNotification } from "@/server/repositories/character-repository";
 
 export function NotificationCenter({ initial, authorizedCharacterIds }: { initial: PlayerNotification[]; authorizedCharacterIds: string[] }) {
@@ -65,7 +66,12 @@ export function NotificationCenter({ initial, authorizedCharacterIds }: { initia
             <div className="flex gap-3">
               {item.type.includes("item") ? <Package size={16} /> : <ScrollText size={16} />}
               <div className="min-w-0 flex-1">
-                <strong className="block text-sm">{item.title}</strong>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <strong className="block text-sm">{item.title}</strong>
+                  <time className="font-mono text-[0.62rem] text-[#777b84]" dateTime={item.createdAt} title={formatDateTime(item.createdAt)}>
+                    {formatClockTime(item.createdAt)}
+                  </time>
+                </div>
                 <p className="mt-1 text-xs text-[#858891]">{item.preview}</p>
               </div>
               {!item.acknowledged && (
