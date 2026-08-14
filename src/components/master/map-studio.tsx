@@ -553,7 +553,7 @@ export function MapStudio({
           <div
             ref={mapa}
             onClick={(event) => void mover(event)}
-            className="relative min-h-full bg-[#090c10]"
+            className="relative bg-[#090c10]"
             style={
               {
                 width: `${zoom}%`,
