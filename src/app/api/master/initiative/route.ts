@@ -147,13 +147,40 @@ export async function POST(request: Request) {
         .eq("scene_id", input.sceneId)
         .not("actor_id", "is", null);
       if (tokenError) throw new Error(tokenError.message);
-      const roster = (tokens as unknown as Array<{
+      type InitiativeActor = {
+        id: string;
+        character_id: string | null;
+        name: string;
+        actor_type: string;
+        actor_combat_profiles:
+          | { current_hp: number; maximum_hp: number; initiative_bonus: number; agility: number }
+          | Array<{ current_hp: number; maximum_hp: number; initiative_bonus: number; agility: number }>
+          | null;
+      };
+      const sceneRoster = (tokens as unknown as Array<{
         actor_id: string;
-        actors: {
-          id: string; character_id: string | null; name: string; actor_type: string;
-          actor_combat_profiles: { current_hp: number; maximum_hp: number; initiative_bonus: number; agility: number } | Array<{ current_hp: number; maximum_hp: number; initiative_bonus: number; agility: number }> | null;
-        } | null;
+        actors: InitiativeActor | null;
       }>).flatMap((token) => token.actors ? [token.actors] : []);
+      const linkedActorIds = [...new Set(
+        before.combatants.flatMap((item) =>
+          item.actor_id && item.kind !== "character" ? [item.actor_id] : [],
+        ),
+      )];
+      let linkedRoster: InitiativeActor[] = [];
+      if (linkedActorIds.length > 0) {
+        const { data: linkedActors, error: linkedError } = await supabase
+          .from("actors")
+          .select("id,character_id,name,actor_type,actor_combat_profiles(current_hp,maximum_hp,initiative_bonus,agility)")
+          .eq("campaign_id", input.campaignId)
+          .in("id", linkedActorIds)
+          .neq("actor_type", "player_character")
+          .is("deleted_at", null);
+        if (linkedError) throw new Error(linkedError.message);
+        linkedRoster = (linkedActors ?? []) as unknown as InitiativeActor[];
+      }
+      const roster = [...new Map(
+        [...sceneRoster, ...linkedRoster].map((actor) => [actor.id, actor] as const),
+      ).values()];
       if (roster.length === 0) throw new Error("Insira personagens, NPCs ou inimigos no mapa antes de solicitar iniciativa.");
       const characterIds = roster.flatMap((actor) => actor.character_id ? [actor.character_id] : []);
       const [{ data: resources, error: resourcesError }, { data: attributes, error: attributesError }] = await Promise.all([

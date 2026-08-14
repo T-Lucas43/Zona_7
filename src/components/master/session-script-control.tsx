@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CircleStop, FileDown, FileText, Pause, Play, RadioTower, RotateCcw, Route, Sparkles } from "lucide-react";
+import { ChevronDown, CircleStop, FileDown, FileText, Pause, Play, RadioTower, RotateCcw, Route, Sparkles } from "lucide-react";
 import type { RoteiroDaCampanha } from "@/server/repositories/master-repository";
 import type { SessionScriptRun } from "@/server/repositories/script-repository";
 
@@ -31,6 +31,7 @@ export function SessionScriptControl({
   const [run, setRun] = useState(initialRun);
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   useEffect(() => {
     const reset = (event: Event) => {
       const detail = (event as CustomEvent<{ scriptStatus?: string }>).detail;
@@ -81,9 +82,22 @@ export function SessionScriptControl({
             <h2 className="font-extrabold">Controle integrado da narrativa</h2>
           </div>
         </div>
-        <span className="tag"><RadioTower size={12} /> {run ? statusLabels[run.status] ?? run.status : "Aguardando início"}</span>
+        <div className="flex items-center gap-2">
+          <span className="tag"><RadioTower size={12} /> {run ? statusLabels[run.status] ?? run.status : "Aguardando início"}</span>
+          <button
+            className="btn px-2"
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Recolher controle do roteiro" : "Expandir controle do roteiro"}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <ChevronDown className={expanded ? "rotate-180 transition-transform" : "transition-transform"} size={15} />
+          </button>
+        </div>
       </div>
 
+      {expanded && (
+        <>
       <div className={`mt-3 grid gap-3 rounded-lg border border-[#4c2a30] bg-black/20 p-3 ${!run ? "md:grid-cols-[minmax(0,1fr)_auto] md:items-end" : ""}`}>
         <label className="text-xs font-bold">
           Roteiro publicado disponível na Central
@@ -137,6 +151,8 @@ export function SessionScriptControl({
         </div>
       )}
       {notice && <p className="session-notice mt-3" role="status">{notice}</p>}
+        </>
+      )}
     </section>
   );
 }

@@ -444,7 +444,11 @@ export default async function PlayerSessionPage({
               <h2 className="font-extrabold">Iniciativa</h2>
             </div>
             <div className="mt-4">
-              <PlayerInitiativeStrip initiative={initiative} round={session.round} />
+              <PlayerInitiativeStrip
+                initiative={initiative}
+                round={session.round}
+                sceneTokens={scene.tokens}
+              />
             </div>
           </section>
           <SessionClock

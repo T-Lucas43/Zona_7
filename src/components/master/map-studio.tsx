@@ -27,21 +27,10 @@ import { resolveCachedMapImage, storeMapImage } from "@/lib/map-image-cache";
 import type { CenaDaCampanha, ItemDaCampanha } from "@/server/repositories/master-repository";
 
 function tokenPortraitStyle(token: CenaDaCampanha["tokens"][number]): React.CSSProperties | null {
-  return getCharacterPortraitStyle(token.nome, token.portraitUrl);
-}
-
-function tokenBodyProfile(token: CenaDaCampanha["tokens"][number]) {
-  if (token.itemId) return "item";
-  const key = token.nome
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/\s+/)[0];
-  if (["davi", "magnus", "arya", "lize", "amber", "gragas"].includes(key)) return key;
-  if (token.actorType === "entity" || token.actorType === "narrator") return "entity";
-  if (token.actorType === "environment") return "environment";
-  if (token.actorType === "threat") return "threat";
-  return "npc";
+  const style = getCharacterPortraitStyle(token.nome, token.portraitUrl);
+  return token.portraitUrl && style
+    ? { ...style, backgroundPosition: "center bottom", backgroundSize: "contain" }
+    : style;
 }
 
 export function MapStudio({
@@ -620,7 +609,7 @@ export function MapStudio({
                   type="button"
                   key={token.id}
                   aria-label={`Token de ${token.nome}`}
-                  className={`map-token map-token-${tokenBodyProfile(token)} absolute z-10 ${effectiveSelectedTokenId === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
+                  className={`map-token absolute z-10 ${effectiveSelectedTokenId === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
                   style={
                     {
                       left: `${token.x * 100}%`,

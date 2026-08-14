@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   CheckCircle2,
+  ChevronDown,
   Dices,
   Eye,
   EyeOff,
@@ -23,6 +24,35 @@ import type {
   CenaDaCampanha,
   EncontroDaCampanha,
 } from "@/server/repositories/master-repository";
+
+function OperationSection({
+  compact,
+  label,
+  icon,
+  children,
+}: {
+  compact: boolean;
+  label: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(label === "Encontros");
+  if (!compact) return <article className="panel rounded-lg p-5">{children}</article>;
+  return (
+    <details
+      className="panel session-operation-details rounded-lg"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="session-operation-summary">
+        <span>{icon}</span>
+        <strong>{label}</strong>
+        <ChevronDown size={15} />
+      </summary>
+      <div className="session-operation-content">{children}</div>
+    </details>
+  );
+}
 
 export function SessionOperations({
   campaignId,
@@ -343,6 +373,34 @@ export function SessionOperations({
       `${actor.nome}: ${action === "remove" ? "retirado da cena" : action === "show" ? "visível aos jogadores" : "oculto dos jogadores"}.`,
     );
   }
+  async function toggleEncounterActor(
+    encounter: EncontroDaCampanha,
+    actor: AtorDaCampanha,
+  ) {
+    const linked = encounter.combatentes.some((combatant) => combatant.actorId === actor.id);
+    const response = await fetch("/api/master/encounters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "set_actor",
+        campaignId,
+        encounterId: encounter.id,
+        actorId: actor.id,
+        linked: !linked,
+      }),
+    });
+    const result = (await response.json()) as { item?: EncontroDaCampanha; error?: string };
+    if (!response.ok || !result.item)
+      return setNotice(result.error ?? "Falha ao atualizar o elenco do encontro.");
+    commitEncounters((items) =>
+      items.map((item) => (item.id === encounter.id ? result.item! : item)),
+    );
+    setNotice(
+      linked
+        ? actor.nome + " foi retirado do encontro."
+        : actor.nome + " foi vinculado ao encontro e usará sua ficha de combate.",
+    );
+  }
   async function resolve(requestId: string, approved: boolean) {
     const request = requests.find((item) => item.id === requestId);
     const response = await fetch(request?.requestKind === "attack" ? "/api/combat/requests" : "/api/abilities/requests", {
@@ -394,13 +452,17 @@ export function SessionOperations({
     const selectedCharacter = characters.find((item) => item.id === checkCharacterId);
     setNotice(`Teste de ${checkSkill || checkAttribute.toUpperCase()} enviado para ${selectedCharacter?.name ?? "o jogador"}.`);
   }
+  const linkableEncounter =
+    encounters.find((item) => item.estado === "active") ??
+    encounters.find((item) => item.estado === "paused") ??
+    encounters.find((item) => item.estado !== "ended");
   return (
     <section
       className={
         compact ? "session-operations-compact space-y-3" : "mt-4 grid gap-4 xl:grid-cols-3"
       }
     >
-      <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
+      <OperationSection compact={compact} label="Encontros" icon={<Swords size={17} />}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Swords size={18} className="text-[#ed5361]" />
@@ -475,13 +537,15 @@ export function SessionOperations({
                       Aguardando as rolagens. O combate só começa quando todos tiverem iniciativa.
                     </p>
                   )}
-                  <form
-                    className="mt-2 grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-1.5"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void initiativeAction(item, "add");
-                    }}
-                  >
+                  <details className="mt-2 rounded border border-[#30333a] bg-black/10">
+                    <summary className="session-side-summary">Participante avulso (avançado)</summary>
+                    <form
+                      className="grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-1.5 p-2"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void initiativeAction(item, "add");
+                      }}
+                    >
                     <input
                       className="field"
                       required
@@ -517,7 +581,8 @@ export function SessionOperations({
                       <option value="npc">NPC</option>
                       <option value="enemy">Inimigo</option>
                     </select>
-                  </form>
+                    </form>
+                  </details>
                   <ol className="mt-2 space-y-1.5">
                     {item.combatentes.map((combatente) => (
                       <li
@@ -592,8 +657,8 @@ export function SessionOperations({
             </div>
           ))}
         </div>
-      </article>
-      <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
+      </OperationSection>
+      <OperationSection compact={compact} label="Solicitar teste" icon={<Dices size={17} />}>
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-extrabold">Solicitar teste</h2>
           <span className="tag">regra efetiva</span>
@@ -621,8 +686,8 @@ export function SessionOperations({
           <input className="field" aria-label="Consequência da falha" placeholder="Consequência da falha (opcional)" value={checkConsequences} onChange={(event) => setCheckConsequences(event.target.value)} />
           <button className="btn btn-primary w-full" type="submit"><Dices size={14} /> Enviar solicitação</button>
         </form>
-      </article>
-      <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
+      </OperationSection>
+      <OperationSection compact={compact} label="Entidades e NPCs" icon={<Sparkles size={17} />}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles size={18} className="text-[#b993ef]" />
@@ -662,6 +727,9 @@ export function SessionOperations({
                   className="size-8 rounded-full"
                 />
                 <strong className="min-w-0 flex-1 truncate text-sm">{actor.nome}</strong>
+                {linkableEncounter?.combatentes.some((combatant) => combatant.actorId === actor.id) && (
+                  <span className="tag">no encontro</span>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {!actor.naCena ? (
@@ -700,12 +768,24 @@ export function SessionOperations({
                     </button>
                   </>
                 )}
+                {linkableEncounter && (
+                  <button
+                    className="btn w-full justify-center px-2"
+                    type="button"
+                    onClick={() => void toggleEncounterActor(linkableEncounter, actor)}
+                  >
+                    <Swords size={12} />
+                    {linkableEncounter.combatentes.some((combatant) => combatant.actorId === actor.id)
+                      ? "Retirar do encontro"
+                      : "Vincular ao encontro"}
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
-      </article>
-      <article className={`panel rounded-lg ${compact ? "p-4" : "p-5"}`}>
+      </OperationSection>
+      <OperationSection compact={compact} label="Solicitações de combate" icon={<Swords size={17} />}>
         <div className="flex items-center justify-between">
           <h2 className="font-extrabold">Solicitações de combate</h2>
           <span className="tag">
@@ -750,7 +830,7 @@ export function SessionOperations({
           ))}
           {requests.length === 0 && <p className="text-xs text-[#777a82]">Nenhuma solicitação.</p>}
         </div>
-      </article>
+      </OperationSection>
       {notice && (
         <p
           className={`rounded border border-[#315b45] bg-[#153323]/30 p-3 text-xs text-[#7bd5a5] ${compact ? "" : "xl:col-span-3"}`}

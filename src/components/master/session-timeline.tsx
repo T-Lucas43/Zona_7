@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { History, RotateCcw, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, History, RotateCcw, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { SessionTimelineEntry } from "@/server/repositories/session-history-repository";
 
@@ -21,6 +21,7 @@ export function SessionTimeline({ campaignId, sessionId, initialEntries }: { cam
   const [reason, setReason] = useState("Correção confirmada pelo mestre");
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setEntries(initialEntries));
     return () => window.cancelAnimationFrame(frame);
@@ -37,7 +38,8 @@ export function SessionTimeline({ campaignId, sessionId, initialEntries }: { cam
     router.refresh();
   }
   return <section className="panel rounded-lg p-4 session-timeline">
-    <div className="flex items-center justify-between gap-3"><div><p className="eyebrow">histórico reversível</p><h2 className="font-extrabold">Linha do tempo da sessão</h2></div><History size={19} className="text-[#e75b66]" /></div>
+    <div className="flex items-center justify-between gap-3"><div><p className="eyebrow">histórico reversível</p><h2 className="font-extrabold">Linha do tempo da sessão</h2></div><div className="flex items-center gap-2"><History size={19} className="text-[#e75b66]" /><button className="btn px-2" type="button" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}>{collapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}</button></div></div>
+    {!collapsed && <>
     <div className="mt-3 max-h-80 space-y-2 overflow-auto pr-1">
       {entries.map((entry) => <article className="session-timeline-entry" data-reversed={entry.reversalStatus === "reversed"} key={entry.id}>
         <span className="session-timeline-dot" /><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{entry.label}</strong><time>{new Date(entry.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time></div><p>{describe(entry)}</p></div>
@@ -47,5 +49,6 @@ export function SessionTimeline({ campaignId, sessionId, initialEntries }: { cam
     </div>
     {selected && <div className="session-reverse-confirm mt-3"><strong>Desfazer “{selected.label}”?</strong><p>Será criado um evento compensatório; nada será apagado da auditoria.</p><input className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} /><div className="mt-2 flex gap-2"><button className="btn btn-primary" type="button" disabled={pending || reason.trim().length < 3} onClick={() => void reverse()}><RotateCcw size={14} /> Confirmar</button><button className="btn" type="button" onClick={() => setSelected(null)}>Cancelar</button></div></div>}
     {notice && <p className="session-notice mt-3">{notice}</p>}
+    </>}
   </section>;
 }

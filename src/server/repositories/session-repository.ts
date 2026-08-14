@@ -29,6 +29,8 @@ export type SessionCastMember = {
 
 export type InitiativeEntry = {
   id: string;
+  actorId: string | null;
+  characterId: string | null;
   name: string;
   value: number | null;
   active: boolean;
@@ -175,6 +177,8 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
   if (!isSupabaseConfigured)
     return initiative.map((entry, index) => ({
       id: `demo-${index}`,
+      actorId: null,
+      characterId: null,
       name: entry.name,
       value: entry.value,
       active: entry.active,
@@ -207,12 +211,14 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
   if (encounter.initiative_state === "idle") return [];
   const { data, error } = await reader
     .from("encounter_combatants")
-    .select("id,display_name,initiative,position,kind,current_hp,maximum_hp,hidden_hp,visible_state")
+    .select("id,actor_id,character_id,display_name,initiative,position,kind,current_hp,maximum_hp,hidden_hp,visible_state")
     .eq("encounter_id", encounter.id)
     .order("position");
   if (error) throw new Error(`Falha ao carregar participantes do encontro: ${error.message}`);
   return data.map((entry) => ({
     id: entry.id,
+    actorId: entry.actor_id,
+    characterId: entry.character_id,
     name: entry.display_name,
     value: entry.initiative,
     active: entry.position === encounter.current_turn_position,

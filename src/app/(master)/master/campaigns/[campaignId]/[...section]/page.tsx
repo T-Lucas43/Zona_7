@@ -384,7 +384,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
     needsAccounts ? getContasDaCampanha(campaignId, area !== "messages") : Promise.resolve([]),
     area === "messages" ? getRemetentes(campaignId) : Promise.resolve([]),
     area === "settings" ? getPersonalizacao(campaignId) : Promise.resolve(null),
-    area === "actors" ? getAtores(campaignId) : Promise.resolve([]),
+    area === "actors" || area === "encounters" ? getAtores(campaignId) : Promise.resolve([]),
     needsScene
       ? getCenaPrincipal(campaignId, area === "maps" ? mapSceneState.sceneId : undefined)
       : Promise.resolve(null),
@@ -426,7 +426,7 @@ async function SectionIndex({ area, campaignId }: { area: string; campaignId: st
         <AccountManager campaignId={campaignId} initialAccounts={contas} characters={personagens} />
       )}
       {area === "encounters" && (
-        <EncounterManager campaignId={campaignId} initialItems={encontros} />
+        <EncounterManager campaignId={campaignId} initialItems={encontros} actors={atores} />
       )}
       {area === "messages" && (
         <div className="mt-6 space-y-4">

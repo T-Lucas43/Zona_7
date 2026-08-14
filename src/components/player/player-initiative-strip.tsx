@@ -1,12 +1,16 @@
 import { Crown, Swords } from "lucide-react";
+import { CharacterPortrait } from "@/components/character/character-portrait";
+import type { CenaDaCampanha } from "@/server/repositories/master-repository";
 import type { InitiativeEntry } from "@/server/repositories/session-repository";
 
 export function PlayerInitiativeStrip({
   initiative,
   round,
+  sceneTokens,
 }: {
   initiative: InitiativeEntry[];
   round: number;
+  sceneTokens: CenaDaCampanha["tokens"];
 }) {
   if (initiative.length === 0) {
     return (
@@ -25,6 +29,11 @@ export function PlayerInitiativeStrip({
       </div>
       <ol>
         {initiative.map((entry, index) => {
+          const sceneToken = sceneTokens.find(
+            (token) =>
+              (entry.actorId && token.atorId === entry.actorId) ||
+              (entry.characterId && token.characterId === entry.characterId),
+          );
           const hpPercent =
             !entry.hiddenHp && entry.currentHp !== null && entry.maximumHp
               ? Math.max(0, Math.min(100, (entry.currentHp / entry.maximumHp) * 100))
@@ -37,14 +46,22 @@ export function PlayerInitiativeStrip({
                 disabled
                 title={`${entry.name} · iniciativa ${entry.value ?? "não definida"} · ${entry.visibleState}${hpPercent !== null ? ` · PV ${entry.currentHp}/${entry.maximumHp}` : ""}`}
               >
-                <span className={`session-initiative-npc ${["character", "player"].includes(entry.kind) ? "is-character" : ""}`}>
-                  {entry.name
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join("")
-                    .toUpperCase()}
-                </span>
+                {sceneToken?.portraitUrl ? (
+                  <CharacterPortrait
+                    name={entry.name}
+                    portraitUrl={sceneToken.portraitUrl}
+                    className="size-9 rounded-full"
+                  />
+                ) : (
+                  <span className={`session-initiative-npc ${["character", "player"].includes(entry.kind) ? "is-character" : ""}`}>
+                    {entry.name
+                      .split(/\s+/)
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join("")
+                      .toUpperCase()}
+                  </span>
+                )}
                 {entry.value !== null && (
                   <small aria-label={`Iniciativa ${entry.value}`}>{entry.value}</small>
                 )}

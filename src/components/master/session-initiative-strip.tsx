@@ -3,7 +3,11 @@
 import { Crown, Swords } from "lucide-react";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import type { CharacterSummary } from "@/types/domain";
-import type { AtorDaCampanha, EncontroDaCampanha } from "@/server/repositories/master-repository";
+import type {
+  AtorDaCampanha,
+  CenaDaCampanha,
+  EncontroDaCampanha,
+} from "@/server/repositories/master-repository";
 
 function matchesCharacter(name: string, character: CharacterSummary) {
   const normalize = (value: string) =>
@@ -20,6 +24,7 @@ export function SessionInitiativeStrip({
   onSelectCombatant,
   selectedCombatantId,
   actors = [],
+  sceneTokens,
 }: {
   encounter: EncontroDaCampanha | null;
   characters: CharacterSummary[];
@@ -27,6 +32,7 @@ export function SessionInitiativeStrip({
   onSelectCombatant: (combatant: EncontroDaCampanha["combatentes"][number]) => void;
   selectedCombatantId?: string;
   actors?: AtorDaCampanha[];
+  sceneTokens: CenaDaCampanha["tokens"];
 }) {
   if (!encounter || encounter.estado === "ended" || encounter.iniciativaEstado === "idle") {
     return (
@@ -49,6 +55,11 @@ export function SessionInitiativeStrip({
             (item) => item.id === combatant.characterId || matchesCharacter(combatant.nome, item),
           );
           const actor = actors.find((item) => item.id === combatant.actorId);
+          const sceneToken = sceneTokens.find(
+            (token) =>
+              (combatant.actorId && token.atorId === combatant.actorId) ||
+              (combatant.characterId && token.characterId === combatant.characterId),
+          );
           const currentHp = character?.resources.pv.current ?? combatant.pvAtual;
           const maximumHp = character?.resources.pv.maximum ?? combatant.pvMaximo;
           const hpPercent =
@@ -71,10 +82,10 @@ export function SessionInitiativeStrip({
                   if (character) onSelectCharacter(character.id);
                 }}
               >
-                {character || actor?.portraitUrl ? (
+                {character || actor?.portraitUrl || sceneToken?.portraitUrl ? (
                   <CharacterPortrait
                     name={character?.name ?? actor?.nome ?? combatant.nome}
-                    portraitUrl={character?.portraitUrl ?? actor?.portraitUrl}
+                    portraitUrl={sceneToken?.portraitUrl ?? character?.portraitUrl ?? actor?.portraitUrl}
                     className="size-10 rounded-full"
                   />
                 ) : (

@@ -615,137 +615,6 @@ select {
     0 0 0 7px color-mix(in srgb, var(--token-color) 65%, transparent);
 }
 
-.map-token-shadow {
-  position: absolute;
-  bottom: 0.55rem;
-  left: 50%;
-  width: 3rem;
-  height: 1rem;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.58);
-  filter: blur(3px);
-  transform: translateX(-50%) skewX(-20deg);
-}
-
-.map-token-body {
-  position: absolute;
-  top: 2.25rem;
-  left: 50%;
-  width: 2.3rem;
-  height: 2.75rem;
-  clip-path: polygon(50% 0, 88% 15%, 100% 66%, 73% 100%, 52% 76%, 28% 100%, 0 66%, 12% 15%);
-  background:
-    linear-gradient(115deg, rgba(255, 255, 255, 0.28), transparent 34%),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--token-color) 86%, white),
-      color-mix(in srgb, var(--token-color) 60%, black)
-    );
-  box-shadow: inset -0.35rem -0.3rem 0 rgba(0, 0, 0, 0.24);
-  transform: translateX(-50%) skewY(-3deg);
-}
-
-.map-token-body::after {
-  position: absolute;
-  top: 0.45rem;
-  left: 50%;
-  width: 1px;
-  height: 1.9rem;
-  background: rgba(255, 255, 255, 0.25);
-  content: "";
-}
-
-.map-token-davi .map-token-body {
-  width: 2rem;
-  background:
-    linear-gradient(90deg, transparent 43%, rgba(255, 255, 255, 0.42) 44% 48%, transparent 49%),
-    linear-gradient(145deg, #9e2632, #351116 74%);
-}
-
-.map-token-magnus .map-token-body {
-  width: 2.45rem;
-  clip-path: polygon(50% 0, 92% 13%, 100% 60%, 78% 100%, 52% 78%, 25% 100%, 0 60%, 8% 13%);
-  background: linear-gradient(145deg, #6f6755, #27241f 72%);
-}
-
-.map-token-arya .map-token-body {
-  width: 1.9rem;
-  clip-path: polygon(50% 0, 82% 18%, 92% 70%, 67% 100%, 50% 73%, 30% 100%, 8% 70%, 18% 18%);
-  background:
-    linear-gradient(120deg, transparent 48%, #9574c9 49% 56%, transparent 57%),
-    linear-gradient(145deg, #382e4a, #15121c 72%);
-}
-
-.map-token-lize .map-token-body {
-  width: 2.15rem;
-  height: 2.95rem;
-  clip-path: polygon(50% 0, 86% 13%, 98% 92%, 67% 100%, 51% 76%, 33% 100%, 2% 92%, 14% 13%);
-  background:
-    linear-gradient(90deg, transparent 47%, rgba(226, 255, 239, 0.68) 48% 52%, transparent 53%),
-    linear-gradient(145deg, #75c49a, #28513b 72%);
-}
-
-.map-token-amber .map-token-body {
-  width: 2.5rem;
-  clip-path: polygon(50% 0, 94% 16%, 100% 64%, 75% 100%, 52% 76%, 29% 100%, 0 64%, 6% 16%);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(20, 32, 48, 0.1) 0 30%,
-      rgba(17, 26, 37, 0.72) 31% 48%,
-      transparent 49%
-    ),
-    linear-gradient(145deg, #3d83c9, #18304b 72%);
-}
-
-.map-token-gragas .map-token-body {
-  top: 2.18rem;
-  width: 3rem;
-  height: 3rem;
-  clip-path: polygon(50% 0, 93% 10%, 100% 58%, 82% 100%, 56% 77%, 26% 100%, 0 58%, 7% 10%);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.08) 0 27%,
-      rgba(33, 6, 10, 0.55) 28% 36%,
-      transparent 37%
-    ),
-    linear-gradient(145deg, #8f2633, #2c0a0f 72%);
-}
-
-.map-token-entity .map-token-body,
-.map-token-environment .map-token-body {
-  clip-path: polygon(50% 0, 92% 36%, 74% 100%, 50% 78%, 26% 100%, 8% 36%);
-  opacity: 0.82;
-  filter: saturate(1.35);
-}
-
-.map-token-threat .map-token-body {
-  width: 2.75rem;
-  clip-path: polygon(
-    12% 0,
-    38% 18%,
-    50% 0,
-    64% 18%,
-    90% 0,
-    100% 66%,
-    73% 100%,
-    51% 76%,
-    27% 100%,
-    0 66%
-  );
-}
-
-.map-token-npc .map-token-body {
-  background:
-    linear-gradient(115deg, rgba(255, 255, 255, 0.22), transparent 34%),
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--token-color) 78%, #58606b),
-      color-mix(in srgb, var(--token-color) 55%, black)
-    );
-}
-
 .map-token-head {
   position: absolute;
   top: 0;
@@ -766,9 +635,11 @@ select {
 }
 
 .map-token-head[data-portrait="true"] {
-  border-color: color-mix(in srgb, var(--token-color) 74%, white);
+  border-color: transparent;
+  border-radius: 0;
   background-color: transparent !important;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.68);
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.78));
+  box-shadow: none;
 }
 
 .map-token-name {
@@ -1082,7 +953,104 @@ details[open] > .session-side-summary::after {
   grid-template-columns: minmax(0, 1fr) !important;
 }
 
-.session-operations-compact article > div[class*="max-h"] {
+.session-operations-compact {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0.6rem;
+  overflow-x: hidden;
+}
+
+.session-operation-details {
+  min-width: 0;
+  overflow: clip;
+  padding: 0;
+}
+
+.session-operation-summary {
+  display: grid;
+  min-height: 3rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  color: #dfe3e8;
+  cursor: pointer;
+  list-style: none;
+}
+
+.session-operation-summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-operation-summary > span {
+  display: grid;
+  width: 1.8rem;
+  height: 1.8rem;
+  place-items: center;
+  border-radius: 0.45rem;
+  color: #ed5966;
+  background: rgba(181, 37, 50, 0.14);
+}
+
+.session-operation-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-operation-summary > svg {
+  color: #87919d;
+  transition: transform 160ms ease;
+}
+
+.session-operation-details[open] > .session-operation-summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.session-operation-details[open] > .session-operation-summary > svg {
+  transform: rotate(180deg);
+}
+
+.session-operation-content {
+  min-width: 0;
+  padding: 0.8rem;
+}
+
+.session-operation-content > div:first-child {
+  display: none;
+}
+
+.session-operation-content .field,
+.session-operation-content form,
+.session-operation-content form > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.session-operation-content form > button {
+  width: 100%;
+  justify-content: center;
+}
+
+.session-operation-content ol {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.session-operation-content ol > li {
+  min-width: 0;
+  grid-template-columns: 1.5rem minmax(0, 1fr) 3.5rem !important;
+}
+
+.session-operation-content ol > li > span:last-child {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.session-operation-content > div[class*="max-h"] {
   max-height: 16rem;
 }
 

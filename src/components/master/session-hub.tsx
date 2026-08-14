@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   Backpack,
   BookOpen,
+  ChevronDown,
   Eye,
   EyeOff,
   HeartPulse,
@@ -144,6 +145,7 @@ export function SessionHub({
   );
   const [sceneSyncEnabled, setSceneSyncEnabled] = useState(initialSceneSyncEnabled);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [transmissionExpanded, setTransmissionExpanded] = useState(false);
   const [liveEncounters, setLiveEncounters] = useState(encounters);
   const [selectedCombatantId, setSelectedCombatantId] = useState<string>();
   const [combatantAmount, setCombatantAmount] = useState(5);
@@ -727,13 +729,19 @@ export function SessionHub({
                   id="transmissao-sessao"
                   onSubmit={savePublicState}
                 >
-                  <div className="flex items-center gap-2">
-                    <Radio size={17} className="text-[#d84b57]" />
-                    <div>
-                      <p className="eyebrow">transmissão</p>
-                      <h2 className="font-extrabold">O que os jogadores veem</h2>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Radio size={17} className="text-[#d84b57]" />
+                      <div>
+                        <p className="eyebrow">transmissão</p>
+                        <h2 className="font-extrabold">O que os jogadores veem</h2>
+                      </div>
                     </div>
+                    <button className="btn px-2" type="button" aria-expanded={transmissionExpanded} onClick={() => setTransmissionExpanded((value) => !value)}>
+                      <ChevronDown className={transmissionExpanded ? "rotate-180 transition-transform" : "transition-transform"} size={14} />
+                    </button>
                   </div>
+                  <fieldset hidden={!transmissionExpanded}>
                   <label className="mt-3 block text-xs font-bold">
                     Título da cena
                     <input
@@ -768,6 +776,7 @@ export function SessionHub({
                     />
                   </label>
                   <button className="btn btn-primary mt-3 w-full">Publicar na sala ao vivo</button>
+                  </fieldset>
                 </form>
               </>
             }
@@ -786,6 +795,7 @@ export function SessionHub({
             encounter={activeEncounter}
             characters={characters}
             actors={actors}
+            sceneTokens={scene.tokens}
             selectedCombatantId={selectedCombatantId}
             onSelectCombatant={(combatant) => {
               setSelectedCombatantId(combatant.id);
