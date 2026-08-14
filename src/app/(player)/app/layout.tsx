@@ -2,9 +2,15 @@ import { redirect } from "next/navigation";
 import { TerminalShell } from "@/components/layout/terminal-shell";
 import { SessionPresence } from "@/components/player/session-presence";
 import { LiveNotificationOverlay } from "@/components/player/live-notification-overlay";
+import { CheckRequestPopup } from "@/components/player/check-request-popup";
+import { LiveSync } from "@/components/live-sync";
 import { requireUser, roleCanAccess } from "@/lib/auth/session";
 import { getCharacterSheetVisibility } from "@/lib/character-visibility";
-import { getAuthorizedCharacters, getAuthorizedNotifications } from "@/server/repositories/character-repository";
+import {
+  getAuthorizedCharacters,
+  getAuthorizedNotifications,
+  getSessionCheckRequests,
+} from "@/server/repositories/character-repository";
 import { getCurrentSession } from "@/server/repositories/session-repository";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +23,7 @@ export default async function PlayerLayout({ children }: { children: React.React
   const character = authorizedCharacters[0];
   const campaignId = character?.campaignId ?? demoCampaignId;
   const session = character ? await getCurrentSession(campaignId) : null;
+  const checkRequests = session ? await getSessionCheckRequests(session.id) : [];
   return (
     <TerminalShell
       user={user}
@@ -31,7 +38,11 @@ export default async function PlayerLayout({ children }: { children: React.React
           characterId={character.id}
         />
       )}
+      <LiveSync campaignId={campaignId} />
       <LiveNotificationOverlay notifications={notifications} />
+      <CheckRequestPopup
+        requests={checkRequests.filter((request) => request.characterId === character?.id)}
+      />
       {children}
     </TerminalShell>
   );

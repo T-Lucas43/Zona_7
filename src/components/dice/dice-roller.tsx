@@ -4,6 +4,13 @@ import { useState } from "react";
 import { Dices, LoaderCircle } from "lucide-react";
 import { RollingDie } from "@/components/dice/rolling-die";
 import { formatClockTime, formatDateTime } from "@/lib/date-time";
+import {
+  buildRpgDiceFormula,
+  rpgDiceBonuses,
+  rpgDiceQuantities,
+  rpgDiceSides,
+  type RpgDiceSides,
+} from "@/lib/dice/options";
 
 type Result = { total: number; rolls: number[]; normalized: string; keptIndexes: number[]; createdAt: string };
 
@@ -18,7 +25,9 @@ export function DiceRoller({
   sessionId?: string;
   disabledReason?: string;
 }) {
-  const [formula, setFormula] = useState("1d20+5");
+  const [quantity, setQuantity] = useState(1);
+  const [sides, setSides] = useState<RpgDiceSides>(20);
+  const [bonus, setBonus] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -29,6 +38,7 @@ export function DiceRoller({
     setError("");
     const startedAt = Date.now();
     try {
+      const formula = buildRpgDiceFormula(quantity, sides, bonus);
       const response = await fetch("/api/dice/roll", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -62,17 +72,43 @@ export function DiceRoller({
         </div>
         <Dices className="text-[#cb3a47]" size={22} />
       </div>
-      <div className="mt-4 flex gap-2">
-        <label htmlFor="dice-formula" className="sr-only">
-          Fórmula de dados
+      <div className="dice-choice-grid mt-4">
+        <label>
+          <span>Quantidade</span>
+          <select
+            className="field"
+            value={quantity}
+            onChange={(event) => setQuantity(Number(event.target.value))}
+          >
+            {rpgDiceQuantities.map((value) => (
+              <option value={value} key={value}>{value}</option>
+            ))}
+          </select>
         </label>
-        <input
-          id="dice-formula"
-          value={formula}
-          onChange={(event) => setFormula(event.target.value)}
-          className="field font-mono"
-          placeholder="4d20kh1+10"
-        />
+        <label>
+          <span>Dado</span>
+          <select
+            className="field"
+            value={sides}
+            onChange={(event) => setSides(Number(event.target.value) as RpgDiceSides)}
+          >
+            {rpgDiceSides.map((value) => (
+              <option value={value} key={value}>d{value}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Bônus</span>
+          <select
+            className="field"
+            value={bonus}
+            onChange={(event) => setBonus(Number(event.target.value))}
+          >
+            {rpgDiceBonuses.map((value) => (
+              <option value={value} key={value}>{value > 0 ? `+${value}` : value}</option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className="btn btn-primary shrink-0"
@@ -82,6 +118,9 @@ export function DiceRoller({
           {pending ? <LoaderCircle className="animate-spin" size={17} /> : "Rolar"}
         </button>
       </div>
+      <p className="mt-2 text-xs text-[#858b94]">
+        Rolagem selecionada: <strong className="font-mono text-[#d8dce2]">{buildRpgDiceFormula(quantity, sides, bonus)}</strong>
+      </p>
       {(pending || result) && (
         <div className="dice-stage mt-4" aria-live="polite">
           <RollingDie rolling={pending} value={result?.total} />

@@ -8,11 +8,19 @@ export function SessionControls({
   campaignId,
   sessionId,
   initialStatus = "active",
+  onTurnAdvanced,
 }: {
   initialTurn: number;
   campaignId: string;
   sessionId: string;
   initialStatus?: string;
+  onTurnAdvanced?: (result: {
+    encounterId?: string;
+    round?: number;
+    turnPosition?: number;
+    currentTurn?: string;
+    currentCharacterId?: string | null;
+  }) => void;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [turn, setTurn] = useState(initialTurn);
@@ -39,11 +47,17 @@ export function SessionControls({
       status?: string;
       elapsedSeconds?: number;
       timerStartedAt?: string | null;
+      encounterId?: string;
+      turnPosition?: number;
+      currentTurn?: string;
+      currentCharacterId?: string | null;
     };
     setPending(false);
     if (!response.ok) return setNotice(result.error ?? "Falha ao controlar a sessão.");
     if (action === "advance") {
       setTurn(result.round ?? turn);
+      onTurnAdvanced?.(result);
+      window.dispatchEvent(new CustomEvent("z7:session-control", { detail: result }));
       setNotice(
         `Turno avançado no servidor${result.round !== undefined ? ` · rodada ${result.round}` : ""}${
           result.scriptRunId ? " · roteiro sincronizado" : " · sem roteiro em execução"

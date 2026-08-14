@@ -33,6 +33,10 @@ export type InitiativeEntry = {
   value: number | null;
   active: boolean;
   kind: string;
+  currentHp: number | null;
+  maximumHp: number | null;
+  hiddenHp: boolean;
+  visibleState: string;
 };
 
 export async function getCurrentSession(
@@ -175,6 +179,10 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
       value: entry.value,
       active: entry.active,
       kind: entry.kind,
+      currentHp: entry.kind === "enemy" ? 18 : null,
+      maximumHp: entry.kind === "enemy" ? 24 : null,
+      hiddenHp: entry.kind === "enemy",
+      visibleState: "Ativo",
     }));
   const supabase = await createClient();
   const { data: authorizedSession, error: sessionError } = await supabase
@@ -198,7 +206,7 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
   if (!encounter) return [];
   const { data, error } = await reader
     .from("encounter_combatants")
-    .select("id,display_name,initiative,position,kind")
+    .select("id,display_name,initiative,position,kind,current_hp,maximum_hp,hidden_hp,visible_state")
     .eq("encounter_id", encounter.id)
     .order("position");
   if (error) throw new Error(`Falha ao carregar participantes do encontro: ${error.message}`);
@@ -208,5 +216,9 @@ export async function getSessionInitiative(sessionId: string): Promise<Initiativ
     value: entry.initiative,
     active: entry.position === encounter.current_turn_position,
     kind: entry.kind,
+    currentHp: entry.current_hp,
+    maximumHp: entry.maximum_hp,
+    hiddenHp: entry.hidden_hp,
+    visibleState: entry.visible_state ?? "Ativo",
   }));
 }

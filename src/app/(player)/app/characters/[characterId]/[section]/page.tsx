@@ -12,7 +12,6 @@ import { AbilityDetails } from "@/components/character/ability-details";
 import { AbilityRequestButton } from "@/components/player/ability-request-button";
 import { InventoryActions } from "@/components/player/inventory-actions";
 import { InvestigationBoard } from "@/components/master/investigation-board";
-import { LiveSync } from "@/components/live-sync";
 import { NotificationCenter } from "@/components/player/notification-center";
 import { isCharacterSectionVisible } from "@/lib/character-visibility";
 import { formatClockTime, formatDateTime } from "@/lib/date-time";
@@ -292,7 +291,6 @@ export default async function CharacterSectionPage({
       )}
       {section === "handouts" && (
         <div>
-          <LiveSync campaignId={character.campaignId ?? "11111111-1111-4111-8111-111111111111"} />
           <PlayerInvestigationBoard />
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             {handouts.map((item) => (

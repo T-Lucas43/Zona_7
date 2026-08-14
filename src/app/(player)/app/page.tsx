@@ -11,7 +11,6 @@ import {
 import { CharacterCard } from "@/components/character/character-card";
 import { CharacterPortrait } from "@/components/character/character-portrait";
 import { DiceRoller } from "@/components/dice/dice-roller";
-import { LiveSync } from "@/components/live-sync";
 import { NotificationCenter } from "@/components/player/notification-center";
 import { PwaInstallCard } from "@/components/player/pwa-install-card";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
@@ -44,7 +43,6 @@ export default async function PlayerHomePage() {
 
   return (
     <div className="player-home">
-      <LiveSync campaignId={character.campaignId} />
       <header className="player-home-heading">
         <div>
           <p className="eyebrow">campanha ativa</p>

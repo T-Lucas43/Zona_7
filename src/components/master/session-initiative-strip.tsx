@@ -17,10 +17,14 @@ export function SessionInitiativeStrip({
   encounter,
   characters,
   onSelectCharacter,
+  onSelectCombatant,
+  selectedCombatantId,
 }: {
   encounter: EncontroDaCampanha | null;
   characters: CharacterSummary[];
   onSelectCharacter: (characterId: string) => void;
+  onSelectCombatant: (combatant: EncontroDaCampanha["combatentes"][number]) => void;
+  selectedCombatantId?: string;
 }) {
   if (!encounter || encounter.estado === "ended") {
     return (
@@ -39,15 +43,30 @@ export function SessionInitiativeStrip({
       </div>
       <ol>
         {encounter.combatentes.map((combatant, index) => {
-          const character = characters.find((item) => matchesCharacter(combatant.nome, item));
+          const character = characters.find(
+            (item) => item.id === combatant.characterId || matchesCharacter(combatant.nome, item),
+          );
+          const currentHp = character?.resources.pv.current ?? combatant.pvAtual;
+          const maximumHp = character?.resources.pv.maximum ?? combatant.pvMaximo;
+          const hpPercent =
+            currentHp !== null && currentHp !== undefined && maximumHp
+              ? Math.max(0, Math.min(100, (currentHp / maximumHp) * 100))
+              : null;
           return (
-            <li key={combatant.id} data-current={combatant.atual}>
+            <li
+              key={combatant.id}
+              data-current={combatant.atual}
+              data-selected={selectedCombatantId === combatant.id}
+            >
               <span className="session-initiative-position">{index + 1}</span>
               <button
                 type="button"
-                disabled={!character}
-                title={character ? `Abrir ações de ${character.name}` : combatant.nome}
-                onClick={() => character && onSelectCharacter(character.id)}
+                aria-pressed={selectedCombatantId === combatant.id}
+                title={`Abrir ações de ${character?.name ?? combatant.nome}`}
+                onClick={() => {
+                  onSelectCombatant(combatant);
+                  if (character) onSelectCharacter(character.id);
+                }}
               >
                 {character ? (
                   <CharacterPortrait
@@ -64,6 +83,15 @@ export function SessionInitiativeStrip({
                   <small aria-label={`Iniciativa ${combatant.iniciativa}`}>{combatant.iniciativa}</small>
                 )}
               </button>
+              {hpPercent !== null && (
+                <span
+                  className="session-initiative-health"
+                  title={`PV ${currentHp}/${maximumHp}`}
+                  aria-label={`Pontos de vida ${currentHp} de ${maximumHp}`}
+                >
+                  <i style={{ width: `${hpPercent}%` }} />
+                </span>
+              )}
             </li>
           );
         })}

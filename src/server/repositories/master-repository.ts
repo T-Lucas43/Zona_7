@@ -216,11 +216,16 @@ export type EncontroDaCampanha = {
   turnoAtual: number | null;
   combatentes: Array<{
     id: string;
+    characterId: string | null;
     nome: string;
     tipo: "character" | "ally" | "npc" | "enemy";
     iniciativa: number | null;
     posicao: number;
     atual: boolean;
+    pvAtual: number | null;
+    pvMaximo: number | null;
+    pvOculto: boolean;
+    estadoVisivel: string;
   }>;
 };
 
@@ -424,11 +429,16 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
           ["Observador Beta", "enemy", 11],
         ].map(([nome, tipo, iniciativa], posicao) => ({
           id: `demo-combatente-${posicao}`,
+          characterId: tipo === "character" ? `demo-character-${posicao}` : null,
           nome: String(nome),
           tipo: tipo as "character" | "enemy",
           iniciativa: Number(iniciativa),
           posicao,
           atual: posicao === 1,
+          pvAtual: tipo === "enemy" ? 24 : null,
+          pvMaximo: tipo === "enemy" ? 24 : null,
+          pvOculto: tipo === "enemy",
+          estadoVisivel: "Ativo",
         })),
       },
     ];
@@ -436,7 +446,7 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
   const { data, error } = await supabase
     .from("encounters")
     .select(
-      "id,name,status,round,current_turn_position,gm_notes,encounter_combatants(id,display_name,kind,initiative,position)",
+      "id,name,status,round,current_turn_position,gm_notes,encounter_combatants(id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state)",
     )
     .eq("campaign_id", campaignId)
     .order("created_at", { ascending: false });
@@ -455,11 +465,16 @@ export async function getEncontros(campaignId: string): Promise<EncontroDaCampan
       turnoAtual: encounter.current_turn_position,
       combatentes: combatentes.map((combatente) => ({
         id: combatente.id,
+        characterId: combatente.character_id,
         nome: combatente.display_name,
         tipo: combatente.kind,
         iniciativa: combatente.initiative,
         posicao: combatente.position,
         atual: combatente.position === encounter.current_turn_position,
+        pvAtual: combatente.current_hp,
+        pvMaximo: combatente.maximum_hp,
+        pvOculto: combatente.hidden_hp,
+        estadoVisivel: combatente.visible_state ?? "Ativo",
       })),
     };
   });

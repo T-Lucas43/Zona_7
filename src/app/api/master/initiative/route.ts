@@ -16,6 +16,11 @@ const schema = z.discriminatedUnion("action", [
     name: z.string().trim().min(1).max(120),
     kind: z.enum(["character", "ally", "npc", "enemy"]),
     initiative: z.number().int().min(-100).max(999).nullable(),
+    characterId: z.uuid().nullable().optional(),
+    currentHp: z.number().int().min(0).max(99999).default(10),
+    maximumHp: z.number().int().min(1).max(99999).default(10),
+    hiddenHp: z.boolean().default(true),
+    visibleState: z.string().trim().max(120).default("Ativo"),
   }),
   z.object({
     action: z.literal("update"),
@@ -33,6 +38,16 @@ const schema = z.discriminatedUnion("action", [
     ...combatant,
     combatantId: z.uuid(),
   }),
+  z.object({
+    action: z.literal("hp"),
+    ...combatant,
+    combatantId: z.uuid(),
+    currentHp: z.number().int().min(0).max(99999),
+    maximumHp: z.number().int().min(1).max(99999),
+    hiddenHp: z.boolean(),
+    visibleState: z.string().trim().max(120),
+    reason: z.string().trim().min(3).max(500),
+  }),
 ]);
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -47,7 +62,7 @@ async function normalizeOrder(supabase: SupabaseClient, campaignId: string, enco
       .single(),
     supabase
       .from("encounter_combatants")
-      .select("id,display_name,kind,initiative,position,initiative_bonus,agility")
+      .select("id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state,initiative_bonus,agility")
       .eq("encounter_id", encounterId)
       .eq("campaign_id", campaignId),
   ]);
@@ -75,11 +90,16 @@ async function normalizeOrder(supabase: SupabaseClient, campaignId: string, enco
   if (turnError) throw new Error(turnError.message);
   return ordered.map((item, position) => ({
     id: item.id,
+    characterId: item.character_id,
     nome: item.display_name,
     tipo: item.kind,
     iniciativa: item.initiative,
     posicao: position,
     atual: position === currentPosition,
+    pvAtual: item.current_hp,
+    pvMaximo: item.maximum_hp,
+    pvOculto: item.hidden_hp,
+    estadoVisivel: item.visible_state ?? "Ativo",
   }));
 }
 
@@ -103,13 +123,19 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const before = await snapshotInitiative(supabase, input.campaignId, input.encounterId);
     if (input.action === "add") {
+      const maximumHp = Math.max(1, input.maximumHp);
       const { error } = await supabase.from("encounter_combatants").insert({
         campaign_id: input.campaignId,
         encounter_id: input.encounterId,
+        character_id: input.characterId ?? null,
         display_name: input.name,
         kind: input.kind,
         initiative: input.initiative,
         position: 9999,
+        current_hp: Math.min(input.currentHp, maximumHp),
+        maximum_hp: maximumHp,
+        hidden_hp: input.hiddenHp,
+        visible_state: input.visibleState || "Ativo",
       });
       if (error) throw new Error(error.message);
     } else if (input.action === "update") {
@@ -124,6 +150,20 @@ export async function POST(request: Request) {
       const { error } = await supabase
         .from("encounter_combatants")
         .delete()
+        .eq("id", input.combatantId)
+        .eq("encounter_id", input.encounterId)
+        .eq("campaign_id", input.campaignId);
+      if (error) throw new Error(error.message);
+    } else if (input.action === "hp") {
+      const maximumHp = Math.max(1, input.maximumHp);
+      const { error } = await supabase
+        .from("encounter_combatants")
+        .update({
+          current_hp: Math.min(input.currentHp, maximumHp),
+          maximum_hp: maximumHp,
+          hidden_hp: input.hiddenHp,
+          visible_state: input.visibleState || "Ativo",
+        })
         .eq("id", input.combatantId)
         .eq("encounter_id", input.encounterId)
         .eq("campaign_id", input.campaignId);
@@ -153,7 +193,10 @@ export async function POST(request: Request) {
       event_type: `initiative_${input.action}`,
       visibility: "gm_only",
       before_data: { combatants: before.combatants, turnPosition: before.turnPosition },
-      after_data: { combatants: combatentes },
+      after_data: {
+        combatants: combatentes,
+        ...(input.action === "hp" ? { reason: input.reason } : {}),
+      },
       idempotency_key: crypto.randomUUID(),
     });
     if (auditError) throw new Error(auditError.message);

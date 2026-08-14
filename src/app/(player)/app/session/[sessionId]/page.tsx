@@ -3,7 +3,6 @@ import { EyeOff, Package, Radio, Skull, Sparkles, Swords, Users } from "lucide-r
 import { DiceRoller } from "@/components/dice/dice-roller";
 import { AbilityDetails } from "@/components/character/ability-details";
 import { CharacterPortrait } from "@/components/character/character-portrait";
-import { LiveSync } from "@/components/live-sync";
 import { MapStudio } from "@/components/master/map-studio";
 import { SessionClock } from "@/components/master/session-clock";
 import { RealtimeIndicator } from "@/components/realtime-indicator";
@@ -12,6 +11,7 @@ import { InventoryActions } from "@/components/player/inventory-actions";
 import { LiveRollFeed } from "@/components/player/live-roll-feed";
 import { SafetyTools } from "@/components/player/safety-tools";
 import { CheckRequestCard } from "@/components/player/check-request-card";
+import { PlayerInitiativeStrip } from "@/components/player/player-initiative-strip";
 import { isCharacterFieldVisible, isCharacterSectionVisible } from "@/lib/character-visibility";
 import { formatClockTime, formatDateTime } from "@/lib/date-time";
 import {
@@ -85,9 +85,11 @@ export default async function PlayerSessionPage({
   const visibleEntities = scene.tokens.filter(
     (token) => token.actorType && token.actorType !== "player_character" && token.visivel,
   );
+  const playerCheckRequests = checkRequests.filter(
+    (request) => request.characterId === character.id,
+  );
   return (
     <div>
-      <LiveSync campaignId={campaignId} />
       <SafetyTools campaignId={campaignId} sessionId={session.id} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -272,7 +274,7 @@ export default async function PlayerSessionPage({
             sessionId={session.id}
             disabledReason={disabled ? "O personagem está sem ações neste estado." : undefined}
           />
-          {checkRequests.filter((request) => request.characterId === character.id).map((request) => (
+          {playerCheckRequests.map((request) => (
             <CheckRequestCard key={request.id} request={request} />
           ))}
           <LiveRollFeed rolls={rolls} />
@@ -394,20 +396,9 @@ export default async function PlayerSessionPage({
               <Swords size={17} className="text-[#d94a57]" />
               <h2 className="font-extrabold">Iniciativa</h2>
             </div>
-            <ol className="mt-4 space-y-2">
-              {initiative.map((entry) => (
-                <li
-                  key={entry.id}
-                  className={`flex items-center justify-between rounded px-3 py-2 text-sm ${entry.active ? "bg-[#8a1b27]/25 text-white" : "bg-white/[0.025] text-[#9b9ea5]"}`}
-                >
-                  <span>{entry.name}</span>
-                  <strong>{entry.value ?? "—"}</strong>
-                </li>
-              ))}
-              {initiative.length === 0 && (
-                <li className="text-sm text-[#777a82]">Nenhum encontro ativo.</li>
-              )}
-            </ol>
+            <div className="mt-4">
+              <PlayerInitiativeStrip initiative={initiative} round={session.round} />
+            </div>
           </section>
           <SessionClock
             initialElapsedSeconds={session.elapsedSeconds ?? 0}

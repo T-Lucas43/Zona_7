@@ -67,6 +67,20 @@ export async function POST(request: Request) {
         .eq("status", "online")
         .not("character_id", "is", null);
       if (participantsError) throw new Error(participantsError.message);
+      const participantIds = (participants ?? []).flatMap((participant) =>
+        participant.character_id ? [participant.character_id] : [],
+      );
+      const { data: resources, error: resourcesError } = participantIds.length
+        ? await supabase
+            .from("character_resources")
+            .select("character_id,current_value,maximum_value")
+            .in("character_id", participantIds)
+            .eq("resource", "pv")
+        : { data: [], error: null };
+      if (resourcesError) throw new Error(resourcesError.message);
+      const pvByCharacter = new Map(
+        (resources ?? []).map((resource) => [resource.character_id, resource]),
+      );
       const initialCombatants = (participants ?? []).flatMap((participant, position) => {
         const related = Array.isArray(participant.characters)
           ? participant.characters[0]
@@ -80,6 +94,10 @@ export async function POST(request: Request) {
                 display_name: related.name,
                 kind: "character" as const,
                 position,
+                current_hp: pvByCharacter.get(participant.character_id)?.current_value ?? null,
+                maximum_hp: pvByCharacter.get(participant.character_id)?.maximum_value ?? null,
+                hidden_hp: false,
+                visible_state: "Ativo",
               },
             ]
           : [];
@@ -93,7 +111,7 @@ export async function POST(request: Request) {
     }
     const { data: combatantRows, error: combatantError } = await supabase
       .from("encounter_combatants")
-      .select("id,display_name,kind,initiative,position")
+      .select("id,character_id,display_name,kind,initiative,position,current_hp,maximum_hp,hidden_hp,visible_state")
       .eq("encounter_id", data.id)
       .eq("campaign_id", input.campaignId)
       .order("position");
@@ -110,11 +128,16 @@ export async function POST(request: Request) {
           turnoAtual: data.current_turn_position,
           combatentes: combatantRows.map((combatente) => ({
             id: combatente.id,
+            characterId: combatente.character_id,
             nome: combatente.display_name,
             tipo: combatente.kind,
             iniciativa: combatente.initiative,
             posicao: combatente.position,
             atual: combatente.position === data.current_turn_position,
+            pvAtual: combatente.current_hp,
+            pvMaximo: combatente.maximum_hp,
+            pvOculto: combatente.hidden_hp,
+            estadoVisivel: combatente.visible_state ?? "Ativo",
           })),
         },
       },

@@ -145,6 +145,12 @@ export function SessionHub({
   const [sceneSyncEnabled, setSceneSyncEnabled] = useState(initialSceneSyncEnabled);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [liveEncounters, setLiveEncounters] = useState(encounters);
+  const [selectedCombatantId, setSelectedCombatantId] = useState<string>();
+  const [combatantAmount, setCombatantAmount] = useState(5);
+  const [combatantMaximumHp, setCombatantMaximumHp] = useState(10);
+  const [combatantVisibleState, setCombatantVisibleState] = useState("Ativo");
+  const [combatantHiddenHp, setCombatantHiddenHp] = useState(true);
+  const [combatantReason, setCombatantReason] = useState("Ajuste durante o combate");
   const [sceneSelection, setSceneSelection] = useState<CenaDaCampanha["tokens"][number] | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const draftKey = `zona7:session-hub:${campaignId}:${session.id}`;
@@ -170,6 +176,20 @@ export function SessionHub({
   const selectedHasEnergy = (selected?.resources.pe.current ?? 0) > 0;
   const selectedToken = scene.tokens.find((token) => token.characterId === selected?.id);
   const nearestThreat = selectedToken ? scene.tokens.filter((token) => token.atorId && ["threat", "entity", "npc"].includes(token.actorType ?? "")).map((token) => ({ token, distance: Math.hypot((token.x - selectedToken.x) * 16, (token.y - selectedToken.y) * 9) })).sort((a, b) => a.distance - b.distance)[0] : undefined;
+  const selectedCombatant = activeEncounter?.combatentes.find(
+    (combatant) => combatant.id === selectedCombatantId,
+  );
+  const selectedCombatantCharacter = selectedCombatant
+    ? characters.find(
+        (character) =>
+          character.id === selectedCombatant.characterId ||
+          normalizeName(selectedCombatant.nome) === normalizeName(character.name) ||
+          normalizeName(selectedCombatant.nome) === normalizeName(character.name).split(" ")[0],
+      )
+    : undefined;
+  const selectedOpponent = selectedCombatant && !selectedCombatantCharacter
+    ? selectedCombatant
+    : undefined;
   useEffect(() => {
     const draft = readSessionDraft<{
       selectedId: string;
@@ -219,10 +239,26 @@ export function SessionHub({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [characterDetails, encounters, initialCharacters, initialSceneSyncEnabled, visibleCharacterIds]);
+  useEffect(() => {
+    if (!selectedOpponent) return;
+    const frame = window.requestAnimationFrame(() => {
+      setCombatantMaximumHp(selectedOpponent.pvMaximo ?? 10);
+      setCombatantVisibleState(selectedOpponent.estadoVisivel || "Ativo");
+      setCombatantHiddenHp(selectedOpponent.pvOculto);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedOpponent]);
   function focusControl(id: string) {
     window.requestAnimationFrame(() =>
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" }),
     );
+  }
+  function selectSessionCharacter(characterId: string) {
+    setSelectedId(characterId);
+    setSelectedCombatantId(
+      activeEncounter?.combatentes.find((combatant) => combatant.characterId === characterId)?.id,
+    );
+    setMessageReview(false);
   }
   async function mutateResource(direction: -1 | 1) {
     if (!selected) return;
@@ -265,6 +301,74 @@ export function SessionHub({
     setNotice(
       `${selected.name}: ${resourceLabels[resource]} alterado para ${current}. O jogador será atualizado em tempo real.`,
     );
+  }
+
+  function commitCombatants(
+    encounterId: string,
+    combatentes: EncontroDaCampanha["combatentes"],
+  ) {
+    setLiveEncounters((current) =>
+      current.map((encounter) =>
+        encounter.id === encounterId
+          ? {
+              ...encounter,
+              combatentes,
+              participantes: combatentes.length,
+              turnoAtual: combatentes.find((combatant) => combatant.atual)?.posicao ?? null,
+            }
+          : encounter,
+      ),
+    );
+  }
+
+  async function updateOpponentHp(nextCurrentHp: number, message: string) {
+    if (!activeEncounter || !selectedOpponent) return;
+    const maximumHp = Math.max(1, combatantMaximumHp);
+    const response = await fetch("/api/master/initiative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "hp",
+        campaignId,
+        encounterId: activeEncounter.id,
+        combatantId: selectedOpponent.id,
+        currentHp: Math.max(0, Math.min(nextCurrentHp, maximumHp)),
+        maximumHp,
+        hiddenHp: combatantHiddenHp,
+        visibleState: combatantVisibleState,
+        reason: combatantReason.trim() || "Ajuste durante o combate",
+      }),
+    });
+    const result = (await response.json()) as {
+      combatentes?: EncontroDaCampanha["combatentes"];
+      error?: string;
+    };
+    if (!response.ok || !result.combatentes)
+      return setNotice(result.error ?? "Falha ao alterar os PV do oponente.");
+    commitCombatants(activeEncounter.id, result.combatentes);
+    setNotice(`${selectedOpponent.nome}: ${message}. Atualização sincronizada em tempo real.`);
+  }
+
+  async function setCurrentOpponentTurn() {
+    if (!activeEncounter || !selectedOpponent) return;
+    const response = await fetch("/api/master/initiative", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "current",
+        campaignId,
+        encounterId: activeEncounter.id,
+        combatantId: selectedOpponent.id,
+      }),
+    });
+    const result = (await response.json()) as {
+      combatentes?: EncontroDaCampanha["combatentes"];
+      error?: string;
+    };
+    if (!response.ok || !result.combatentes)
+      return setNotice(result.error ?? "Falha ao definir o turno atual.");
+    commitCombatants(activeEncounter.id, result.combatentes);
+    setNotice(`Turno de ${selectedOpponent.nome} definido e sincronizado.`);
   }
 
   async function toggleVisibility() {
@@ -493,6 +597,24 @@ export function SessionHub({
               campaignId={campaignId}
               sessionId={session.id}
               initialStatus={session.status}
+              onTurnAdvanced={(result) => {
+                if (result.turnPosition === undefined) return;
+                setLiveEncounters((current) =>
+                  current.map((encounter) =>
+                    !result.encounterId || encounter.id === result.encounterId
+                      ? {
+                          ...encounter,
+                          rodada: result.round ?? encounter.rodada,
+                          turnoAtual: result.turnPosition ?? encounter.turnoAtual,
+                          combatentes: encounter.combatentes.map((combatant) => ({
+                            ...combatant,
+                            atual: combatant.posicao === result.turnPosition,
+                          })),
+                        }
+                      : encounter,
+                  ),
+                );
+              }}
             />
           </div>
         </div>
@@ -541,8 +663,7 @@ export function SessionHub({
             allowedCharacterIds={characters.map((character) => character.id)}
             selectedCharacterId={selected?.id}
             onSelectCharacter={(characterId) => {
-              setSelectedId(characterId);
-              setMessageReview(false);
+              selectSessionCharacter(characterId);
             }}
             onSelectToken={setSceneSelection}
             items={items}
@@ -631,9 +752,14 @@ export function SessionHub({
           <SessionInitiativeStrip
             encounter={activeEncounter}
             characters={characters}
-            onSelectCharacter={(characterId) => {
-              setSelectedId(characterId);
+            selectedCombatantId={selectedCombatantId}
+            onSelectCombatant={(combatant) => {
+              setSelectedCombatantId(combatant.id);
               setMessageReview(false);
+              if (rightPanelCollapsed) setRightPanelCollapsed(false);
+            }}
+            onSelectCharacter={(characterId) => {
+              selectSessionCharacter(characterId);
             }}
           />
         </div>
@@ -667,8 +793,7 @@ export function SessionHub({
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedId(character.id);
-                        setMessageReview(false);
+                        selectSessionCharacter(character.id);
                       }}
                       key={character.id}
                       className={`central-card rounded-lg border p-2 text-left ${selected?.id === character.id ? "border-[#a83a45] bg-[#8a1b27]/15" : "border-[#30333a] bg-black/10"}`}
@@ -700,6 +825,142 @@ export function SessionHub({
                   )}
                 </div>
               </section>
+
+              {selectedOpponent && activeEncounter && (
+                <section className="panel rounded-lg p-4" aria-live="polite">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="eyebrow">controle de combate</p>
+                      <h2 className="text-lg font-extrabold">{selectedOpponent.nome}</h2>
+                      <p className="mt-1 text-xs text-[#8f98a3]">
+                        {selectedOpponent.tipo === "enemy"
+                          ? "Oponente"
+                          : selectedOpponent.tipo === "npc"
+                            ? "NPC"
+                            : "Aliado"}
+                        {selectedOpponent.iniciativa !== null
+                          ? ` · iniciativa ${selectedOpponent.iniciativa}`
+                          : ""}
+                      </p>
+                    </div>
+                    <span className={`tag ${selectedOpponent.atual ? "text-[#eab957]" : ""}`}>
+                      {selectedOpponent.atual ? "Turno atual" : `Posição ${selectedOpponent.posicao + 1}`}
+                    </span>
+                  </div>
+                  <div className="session-opponent-health mt-3">
+                    <div>
+                      <span>PV</span>
+                      <strong>
+                        {selectedOpponent.pvAtual ?? combatantMaximumHp}/{combatantMaximumHp}
+                      </strong>
+                    </div>
+                    <i>
+                      <b
+                        style={{
+                          width: `${Math.max(0, Math.min(100, ((selectedOpponent.pvAtual ?? combatantMaximumHp) / Math.max(1, combatantMaximumHp)) * 100))}%`,
+                        }}
+                      />
+                    </i>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <label className="text-xs font-bold">
+                      Valor da alteração
+                      <input
+                        className="field mt-1"
+                        type="number"
+                        min={1}
+                        max={99999}
+                        value={combatantAmount}
+                        onChange={(event) => setCombatantAmount(Math.max(1, Number(event.target.value)))}
+                      />
+                    </label>
+                    <label className="text-xs font-bold">
+                      PV máximo
+                      <input
+                        className="field mt-1"
+                        type="number"
+                        min={1}
+                        max={99999}
+                        value={combatantMaximumHp}
+                        onChange={(event) =>
+                          setCombatantMaximumHp(Math.max(1, Number(event.target.value)))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className="mt-2 block text-xs font-bold">
+                    Estado visível
+                    <input
+                      className="field mt-1"
+                      maxLength={120}
+                      value={combatantVisibleState}
+                      onChange={(event) => setCombatantVisibleState(event.target.value)}
+                    />
+                  </label>
+                  <label className="mt-2 block text-xs font-bold">
+                    Motivo
+                    <input
+                      className="field mt-1"
+                      maxLength={500}
+                      value={combatantReason}
+                      onChange={(event) => setCombatantReason(event.target.value)}
+                    />
+                  </label>
+                  <label className="mt-3 flex items-center gap-2 text-xs text-[#a7abb2]">
+                    <input
+                      type="checkbox"
+                      checked={combatantHiddenHp}
+                      onChange={(event) => setCombatantHiddenHp(event.target.checked)}
+                    />
+                    Ocultar o valor exato de PV dos jogadores
+                  </label>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      className="btn border-[#6e252e] text-[#f0949d]"
+                      type="button"
+                      onClick={() =>
+                        void updateOpponentHp(
+                          (selectedOpponent.pvAtual ?? combatantMaximumHp) - combatantAmount,
+                          `${combatantAmount} de dano aplicado`,
+                        )
+                      }
+                    >
+                      <Swords size={14} /> Aplicar dano
+                    </button>
+                    <button
+                      className="btn border-[#2f6147] text-[#7bd5a5]"
+                      type="button"
+                      onClick={() =>
+                        void updateOpponentHp(
+                          (selectedOpponent.pvAtual ?? combatantMaximumHp) + combatantAmount,
+                          `${combatantAmount} PV recuperados`,
+                        )
+                      }
+                    >
+                      <HeartPulse size={14} /> Curar
+                    </button>
+                    <button
+                      className="btn"
+                      type="button"
+                      onClick={() =>
+                        void updateOpponentHp(
+                          selectedOpponent.pvAtual ?? combatantMaximumHp,
+                          "PV máximo, estado e visibilidade salvos",
+                        )
+                      }
+                    >
+                      Salvar ajustes
+                    </button>
+                    <button
+                      className="btn border-[#6d5527] text-[#eab957]"
+                      type="button"
+                      onClick={() => void setCurrentOpponentTurn()}
+                    >
+                      Definir turno
+                    </button>
+                  </div>
+                </section>
+              )}
 
               {selected ? (
                 <section className="panel rounded-lg p-4" id="acoes-rapidas" aria-live="polite">
