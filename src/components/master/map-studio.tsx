@@ -27,8 +27,9 @@ import { resolveCachedMapImage, storeMapImage } from "@/lib/map-image-cache";
 import type { CenaDaCampanha, ItemDaCampanha } from "@/server/repositories/master-repository";
 
 function tokenPortraitStyle(token: CenaDaCampanha["tokens"][number]): React.CSSProperties | null {
-  const style = getCharacterPortraitStyle(token.nome, token.portraitUrl);
-  return token.portraitUrl && style
+  const portraitUrl = token.mapPortraitUrl ?? token.portraitUrl;
+  const style = getCharacterPortraitStyle(token.nome, portraitUrl);
+  return portraitUrl && style
     ? { ...style, backgroundPosition: "center bottom", backgroundSize: "contain" }
     : style;
 }
@@ -609,7 +610,7 @@ export function MapStudio({
                   type="button"
                   key={token.id}
                   aria-label={`Token de ${token.nome}`}
-                  className={`map-token absolute z-10 ${effectiveSelectedTokenId === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
+                  className={`map-token absolute z-10 ${token.mapPortraitUrl ? "map-token-full-body" : ""} ${effectiveSelectedTokenId === token.id || selectedCharacterId === token.characterId ? "map-token-selected" : ""}`}
                   style={
                     {
                       left: `${token.x * 100}%`,
@@ -632,6 +633,7 @@ export function MapStudio({
                     className="map-token-head"
                     style={{ backgroundColor: portraitStyle ? "transparent" : token.cor, ...portraitStyle }}
                     data-portrait={portraitStyle ? "true" : "false"}
+                    data-map-portrait={token.mapPortraitUrl ? "true" : "false"}
                   >
                     {!portraitStyle && (token.nome ?? "TK").slice(0, 2).toUpperCase()}
                   </span>

@@ -43,6 +43,7 @@ export interface CharacterSummary {
   pePerTurn?: number;
   version?: number;
   portraitUrl?: string;
+  mapPortraitUrl?: string;
   resources: Record<ResourceKind, CharacterResource>;
   attributes: Record<"agi" | "for" | "int" | "pre" | "vig", number>;
   resistances?: Record<"fortitude" | "reflexes" | "willpower", number>;

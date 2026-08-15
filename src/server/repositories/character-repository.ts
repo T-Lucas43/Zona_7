@@ -63,7 +63,11 @@ type CharacterRow = {
   } | null;
 };
 
-function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary {
+function mapCharacter(
+  row: CharacterRow,
+  portraitUrl?: string,
+  mapPortraitUrl?: string,
+): CharacterSummary {
   const resource = (kind: ResourceKind) => {
     const value = row.character_resources.find((item) => item.resource === kind);
     return { kind, current: value?.current_value ?? 0, maximum: value?.maximum_value ?? 0 };
@@ -95,6 +99,7 @@ function mapCharacter(row: CharacterRow, portraitUrl?: string): CharacterSummary
     pePerTurn: row.pe_per_turn ?? 0,
     version: row.version,
     portraitUrl,
+    mapPortraitUrl,
     resources: { pv: resource("pv"), pe: resource("pe"), san: resource("san") },
     attributes: {
       agi: row.character_attributes?.agility ?? 1,
@@ -140,13 +145,37 @@ async function mapCharactersWithPortraits(
   supabase: Awaited<ReturnType<typeof createClient>>,
   rows: CharacterRow[],
 ) {
+  const characterIds = rows.map((row) => row.id);
+  const { data: actors } = characterIds.length
+    ? await supabase
+        .from("actors")
+        .select("character_id,map_portrait_path")
+        .in("character_id", characterIds)
+        .is("deleted_at", null)
+    : { data: [] };
+  const mapPortraitByCharacter = new Map(
+    (actors ?? []).flatMap((actor) =>
+      actor.character_id && actor.map_portrait_path
+        ? [[actor.character_id, actor.map_portrait_path] as const]
+        : [],
+    ),
+  );
   return Promise.all(
     rows.map(async (row) => {
-      if (!row.portrait_path) return mapCharacter(row);
-      const { data } = await supabase.storage
-        .from("portraits")
-        .createSignedUrl(row.portrait_path, 3600);
-      return mapCharacter(row, data?.signedUrl);
+      const mapPortraitPath = mapPortraitByCharacter.get(row.id);
+      const [portrait, mapPortrait] = await Promise.all([
+        row.portrait_path
+          ? supabase.storage.from("portraits").createSignedUrl(row.portrait_path, 3600)
+          : Promise.resolve(null),
+        mapPortraitPath
+          ? supabase.storage.from("actor-portraits").createSignedUrl(mapPortraitPath, 3600)
+          : Promise.resolve(null),
+      ]);
+      return mapCharacter(
+        row,
+        portrait?.data?.signedUrl,
+        mapPortrait?.data?.signedUrl,
+      );
     }),
   );
 }

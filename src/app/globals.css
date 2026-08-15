@@ -602,6 +602,17 @@ select {
     transform 150ms ease;
 }
 
+.map-token-full-body {
+  width: 4.2rem;
+  height: 5.4rem;
+}
+
+.map-token-full-body .map-token-head {
+  top: -0.15rem;
+  width: 3.75rem;
+  height: 4.7rem;
+}
+
 .map-token:hover,
 .map-token-selected {
   z-index: 20;
@@ -640,6 +651,11 @@ select {
   background-color: transparent !important;
   filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.78));
   box-shadow: none;
+}
+
+.map-token-head[data-map-portrait="true"] {
+  background-position: center bottom;
+  background-size: contain;
 }
 
 .map-token-name {

@@ -33,12 +33,18 @@ export function CharacterPortrait({
   name,
   portraitUrl,
   className = "size-11 rounded-md",
+  fit = "cover",
 }: {
   name: string;
   portraitUrl?: string;
   className?: string;
+  fit?: "cover" | "contain";
 }) {
-  const style = getCharacterPortraitStyle(name, portraitUrl);
+  const baseStyle = getCharacterPortraitStyle(name, portraitUrl);
+  const style =
+    baseStyle && portraitUrl && fit === "contain"
+      ? { ...baseStyle, backgroundPosition: "center bottom", backgroundSize: "contain" }
+      : baseStyle;
   const initials = name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase();
   return (
     <span

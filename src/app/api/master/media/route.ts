@@ -30,8 +30,8 @@ export async function POST(request: Request) {
     const user = await requireCampaignMaster(campaignId);
     if (!allowed.has(file.type)) throw new Error("Formato de arquivo não permitido.");
     if (file.size > 26_214_400) throw new Error("O arquivo ultrapassa 25 MB.");
-    if (["portrait", "actor_portrait", "item"].includes(assetType) && file.size > 5_242_880)
-      throw new Error("O retrato ultrapassa 5 MB.");
+    if (["portrait", "character_map_portrait", "actor_portrait", "item"].includes(assetType) && file.size > 5_242_880)
+      throw new Error("A imagem ultrapassa 5 MB.");
     if (!isSupabaseConfigured)
       return NextResponse.json(
         {
@@ -46,9 +46,35 @@ export async function POST(request: Request) {
         { status: 201 },
       );
     const supabase = await createClient();
-    const portrait = assetType === "portrait" || assetType === "token";
+    const characterPortrait = assetType === "portrait";
+    const characterMapPortrait = assetType === "character_map_portrait";
+    const portrait = characterPortrait || assetType === "token";
     const actorPortrait = assetType === "actor_portrait";
     const itemImage = assetType === "item";
+    let characterActorId = "";
+    if (characterPortrait || characterMapPortrait) {
+      if (!/^[0-9a-f-]{36}$/i.test(characterId)) throw new Error("Personagem inválido.");
+      const { data: character, error: characterLookupError } = await supabase
+        .from("characters")
+        .select("id")
+        .eq("id", characterId)
+        .eq("campaign_id", campaignId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (characterLookupError || !character) throw new Error("Personagem não encontrado.");
+      if (characterMapPortrait) {
+        const { data: actor, error: actorLookupError } = await supabase
+          .from("actors")
+          .select("id")
+          .eq("character_id", characterId)
+          .eq("campaign_id", campaignId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (actorLookupError || !actor)
+          throw new Error("O personagem ainda não possui um ator vinculado ao mapa.");
+        characterActorId = actor.id;
+      }
+    }
     if (actorPortrait) {
       if (!/^[0-9a-f-]{36}$/i.test(actorId)) throw new Error("Ator inválido.");
       const { data: actor, error: actorLookupError } = await supabase
@@ -71,7 +97,7 @@ export async function POST(request: Request) {
         .maybeSingle();
       if (itemLookupError || !item) throw new Error("Item não encontrado.");
     }
-    const bucket = actorPortrait
+    const bucket = actorPortrait || characterMapPortrait
       ? "actor-portraits"
       : portrait
         ? "portraits"
@@ -81,8 +107,8 @@ export async function POST(request: Request) {
     const suffix = extname(file.name)
       .toLowerCase()
       .replace(/[^.a-z0-9]/g, "");
-    const path = actorPortrait
-      ? `${campaignId}/${actorId}/${crypto.randomUUID()}${suffix}`
+    const path = actorPortrait || characterMapPortrait
+      ? `${campaignId}/${actorPortrait ? actorId : characterActorId}/${characterMapPortrait ? "mapa" : "retrato"}/${crypto.randomUUID()}${suffix}`
       : itemImage
         ? `${campaignId}/items/${itemId}/${crypto.randomUUID()}${suffix}`
         : `${campaignId}/${assetType}/${crypto.randomUUID()}${suffix}`;
@@ -95,19 +121,18 @@ export async function POST(request: Request) {
       .insert({
         campaign_id: campaignId,
         owner_user_id: user.id,
-        asset_type: actorPortrait ? "portrait" : itemImage ? "image" : assetType,
+        asset_type: actorPortrait ? "portrait" : characterMapPortrait ? "token" : itemImage ? "image" : assetType,
         title,
         storage_bucket: bucket,
         storage_path: path,
         mime_type: file.type,
         byte_size: file.size,
-        visibility: assetType === "map" || itemImage ? "campaign" : "gm_only",
+        visibility: assetType === "map" || itemImage || characterMapPortrait ? "campaign" : "gm_only",
       })
       .select("id")
       .single();
     if (error) throw new Error(error.message);
-    if (assetType === "portrait") {
-      if (!/^[0-9a-f-]{36}$/i.test(characterId)) throw new Error("Personagem inválido.");
+    if (characterPortrait) {
       const { error: characterError } = await supabase
         .from("characters")
         .update({ portrait_path: path, updated_at: new Date().toISOString() })
@@ -120,6 +145,27 @@ export async function POST(request: Request) {
         .eq("character_id", characterId)
         .eq("campaign_id", campaignId);
       if (actorError) throw new Error(actorError.message);
+    }
+    if (characterMapPortrait) {
+      const { error: actorError } = await supabase
+        .from("actors")
+        .update({ map_portrait_path: path, updated_at: new Date().toISOString() })
+        .eq("id", characterActorId)
+        .eq("campaign_id", campaignId);
+      if (actorError) throw new Error(actorError.message);
+      await supabase
+        .from("actor_media")
+        .update({ is_primary: false })
+        .eq("actor_id", characterActorId)
+        .eq("purpose", "map_portrait");
+      const { error: mediaLinkError } = await supabase.from("actor_media").insert({
+        campaign_id: campaignId,
+        actor_id: characterActorId,
+        media_asset_id: data.id,
+        purpose: "map_portrait",
+        is_primary: true,
+      });
+      if (mediaLinkError) throw new Error(mediaLinkError.message);
     }
     if (assetType === "actor_portrait") {
       const { error: actorError } = await supabase
@@ -169,7 +215,7 @@ export async function POST(request: Request) {
       entity_type:
         assetType === "map"
           ? "game_scene"
-          : actorPortrait
+          : actorPortrait || characterMapPortrait
             ? "actor"
             : itemImage
               ? "item"
@@ -177,19 +223,21 @@ export async function POST(request: Request) {
       entity_id:
         assetType === "map"
           ? sceneId
-          : actorPortrait
-            ? actorId
+          : actorPortrait || characterMapPortrait
+            ? actorPortrait ? actorId : characterActorId
             : itemImage
               ? itemId
               : characterId || data.id,
       event_type:
         assetType === "map"
           ? "scene_map_updated"
-          : itemImage
+          : characterMapPortrait
+            ? "map_portrait_updated"
+            : itemImage
             ? "item_image_updated"
             : "portrait_updated",
       visibility: "gm_only",
-      after_data: { mediaAssetId: data.id, assetType, title },
+      after_data: { mediaAssetId: data.id, assetType, title, characterId: characterId || undefined },
       metadata: { storageBucket: bucket },
       idempotency_key: crypto.randomUUID(),
     });

@@ -46,11 +46,12 @@ export function PlayerInitiativeStrip({
                 disabled
                 title={`${entry.name} · iniciativa ${entry.value ?? "não definida"} · ${entry.visibleState}${hpPercent !== null ? ` · PV ${entry.currentHp}/${entry.maximumHp}` : ""}`}
               >
-                {sceneToken?.portraitUrl ? (
+                {sceneToken?.mapPortraitUrl || sceneToken?.portraitUrl ? (
                   <CharacterPortrait
                     name={entry.name}
-                    portraitUrl={sceneToken.portraitUrl}
+                    portraitUrl={sceneToken.mapPortraitUrl ?? sceneToken.portraitUrl}
                     className="size-9 rounded-full"
+                    fit={sceneToken.mapPortraitUrl ? "contain" : "cover"}
                   />
                 ) : (
                   <span className={`session-initiative-npc ${["character", "player"].includes(entry.kind) ? "is-character" : ""}`}>

@@ -60,6 +60,9 @@ export function SessionInitiativeStrip({
               (combatant.actorId && token.atorId === combatant.actorId) ||
               (combatant.characterId && token.characterId === combatant.characterId),
           );
+          const mapPortraitUrl = sceneToken?.mapPortraitUrl ?? actor?.mapPortraitUrl;
+          const initiativePortraitUrl =
+            mapPortraitUrl ?? sceneToken?.portraitUrl ?? character?.portraitUrl ?? actor?.portraitUrl;
           const currentHp = character?.resources.pv.current ?? combatant.pvAtual;
           const maximumHp = character?.resources.pv.maximum ?? combatant.pvMaximo;
           const hpPercent =
@@ -82,11 +85,12 @@ export function SessionInitiativeStrip({
                   if (character) onSelectCharacter(character.id);
                 }}
               >
-                {character || actor?.portraitUrl || sceneToken?.portraitUrl ? (
+                {character || initiativePortraitUrl ? (
                   <CharacterPortrait
                     name={character?.name ?? actor?.nome ?? combatant.nome}
-                    portraitUrl={sceneToken?.portraitUrl ?? character?.portraitUrl ?? actor?.portraitUrl}
+                    portraitUrl={initiativePortraitUrl}
                     className="size-10 rounded-full"
+                    fit={mapPortraitUrl ? "contain" : "cover"}
                   />
                 ) : (
                   <span className="session-initiative-npc">

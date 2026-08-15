@@ -133,7 +133,13 @@ export function CharacterIdentityEditor({
       </div>
 
       <div className="mt-4">
-        <PortraitUploader campaignId={campaignId} characterId={initial.id} characterName={data.name} initialUrl={initial.portraitUrl} />
+        <PortraitUploader
+          campaignId={campaignId}
+          characterId={initial.id}
+          characterName={data.name}
+          initialUrl={initial.portraitUrl}
+          initialMapUrl={initial.mapPortraitUrl}
+        />
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

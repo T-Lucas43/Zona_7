@@ -92,6 +92,7 @@ export type AtorDaCampanha = {
   estado: string;
   visibilidade: string;
   portraitUrl?: string;
+  mapPortraitUrl?: string;
   naCena: boolean;
   tokenId?: string;
   tokenVisivel?: boolean;
@@ -158,6 +159,8 @@ export type CenaDaCampanha = {
     characterState?: string;
     portraitUrl?: string;
     portraitKey?: string;
+    mapPortraitUrl?: string;
+    mapPortraitKey?: string;
     itemImageUrl?: string;
     itemImageKey?: string;
     nome: string;
@@ -1008,7 +1011,7 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
   const { data, error } = await supabase
     .from("actors")
     .select(
-      "id,name,actor_type,public_description,color,state,visibility,public_portrait_path,scene_tokens(id,visible,scene_id),actor_combat_profiles(classification,threat_level,defense,movement,initiative_bonus,agility,strength,intellect,presence,vigor,current_hp,maximum_hp,current_pe,maximum_pe,current_san,maximum_san,resistances,skills,conditions,notes),actor_attacks(id,name,attack_formula,damage_formula,damage_type,range_text,action_type,description,requirements,additional_effects,resource_kind,resource_cost,target_scope,target_min,target_max,is_active,sort_order)",
+      "id,name,actor_type,public_description,color,state,visibility,public_portrait_path,map_portrait_path,scene_tokens(id,visible,scene_id),actor_combat_profiles(classification,threat_level,defense,movement,initiative_bonus,agility,strength,intellect,presence,vigor,current_hp,maximum_hp,current_pe,maximum_pe,current_san,maximum_san,resistances,skills,conditions,notes),actor_attacks(id,name,attack_formula,damage_formula,damage_type,range_text,action_type,description,requirements,additional_effects,resource_kind,resource_cost,target_scope,target_min,target_max,is_active,sort_order)",
     )
     .eq("campaign_id", campaignId)
     .neq("actor_type", "player_character")
@@ -1022,6 +1025,11 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
             .from("actor-portraits")
             .createSignedUrl(ator.public_portrait_path, 3600)
         : null;
+      const mapPortrait = ator.map_portrait_path
+        ? await supabase.storage
+            .from("actor-portraits")
+            .createSignedUrl(ator.map_portrait_path, 3600)
+        : null;
       const profile = Array.isArray(ator.actor_combat_profiles)
         ? ator.actor_combat_profiles[0]
         : ator.actor_combat_profiles;
@@ -1034,6 +1042,7 @@ export async function getAtores(campaignId: string): Promise<AtorDaCampanha[]> {
         estado: statusLabels[ator.state] ?? ator.state,
         visibilidade: visibilityLabels[ator.visibility] ?? ator.visibility,
         portraitUrl: portrait?.data?.signedUrl,
+        mapPortraitUrl: mapPortrait?.data?.signedUrl,
         naCena: ator.scene_tokens.length > 0,
         tokenId: ator.scene_tokens[0]?.id,
         tokenVisivel: ator.scene_tokens[0]?.visible,
@@ -1117,7 +1126,7 @@ export async function getCenaPrincipal(
   let query = supabase
     .from("game_scenes")
     .select(
-      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,item_id,label,x,y,z_index,visible,actors(color,character_id,actor_type,public_portrait_path,characters(character_state)),items(name,image_path))",
+      "id,name,description,state,grid_type,media_assets!game_scenes_map_asset_id_fkey(storage_bucket,storage_path),scene_tokens(id,actor_id,item_id,label,x,y,z_index,visible,actors(color,character_id,actor_type,public_portrait_path,map_portrait_path,characters(character_state)),items(name,image_path))",
     )
     .eq("campaign_id", campaignId)
     .is("deleted_at", null);
@@ -1146,6 +1155,7 @@ export async function getCenaPrincipal(
       character_id: string | null;
       actor_type: string;
       public_portrait_path: string | null;
+      map_portrait_path: string | null;
       characters: { character_state: string | null } | null;
     } | null;
     items: { name: string; image_path: string | null } | null;
@@ -1158,7 +1168,7 @@ export async function getCenaPrincipal(
       ? privilegedReader
           .from("actors")
           .select(
-            "id,color,character_id,actor_type,public_portrait_path,characters(character_state)",
+            "id,color,character_id,actor_type,public_portrait_path,map_portrait_path,characters(character_state)",
           )
           .eq("campaign_id", campaignId)
           .in("id", visibleActorIds)
@@ -1197,6 +1207,11 @@ export async function getCenaPrincipal(
             .from(actor.character_id ? "portraits" : "actor-portraits")
             .createSignedUrl(actor.public_portrait_path, 3600)
         : null;
+      const mapPortrait = actor?.map_portrait_path
+        ? await storageReader.storage
+            .from("actor-portraits")
+            .createSignedUrl(actor.map_portrait_path, 3600)
+        : null;
       const itemImage = item?.image_path
         ? await storageReader.storage.from("handouts-public").createSignedUrl(item.image_path, 3600)
         : null;
@@ -1209,6 +1224,8 @@ export async function getCenaPrincipal(
         characterState: actorCharacter?.character_state ?? undefined,
         portraitUrl: portrait?.data?.signedUrl,
         portraitKey: actor?.public_portrait_path ?? undefined,
+        mapPortraitUrl: mapPortrait?.data?.signedUrl,
+        mapPortraitKey: actor?.map_portrait_path ?? undefined,
         itemImageUrl: itemImage?.data?.signedUrl,
         itemImageKey: item?.image_path ?? undefined,
         nome: item?.name ?? token.label,
