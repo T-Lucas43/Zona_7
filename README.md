@@ -1,3 +1,9 @@
+<p align="center"><img src=".github/assets/banner.svg" alt="Zona 7 · Terminal" width="100%" /></p>
+
+<p align="center"><a href="https://github.com/T-Lucas43">Perfil</a> · <a href="https://github.com/T-Lucas43?tab=repositories">Mais projetos</a> · <a href="https://www.linkedin.com/in/tarcisio-lucas-io">LinkedIn</a></p>
+
+---
+
 # Zona 7 - Terminal
 
 Aplicação web completa para a campanha **Zona 7: A Convergência**, com áreas separadas para mestre e jogador, fichas interativas, sessão ao vivo, recursos transacionais, alertas, habilidades, dados, mensagens privadas, combate, pistas e auditoria.
